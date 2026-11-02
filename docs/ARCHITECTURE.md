@@ -88,8 +88,11 @@ RenderJob
 
 | Модуль | Назначение |
 |---|---|
-| `services/llm/client.py` | Единый клиент ProxyAPI (OpenAI-совместимый): основная и запасная модель, повторы, JSON-режим, учёт токенов |
-| `services/scenes.py` | Загрузка промпта, вызов LLM, валидация схемы сцен |
+| `services/llm/client.py` | ✅ Единый клиент ProxyAPI (OpenAI SDK, `base_url` из `.env`): повторы с экспоненциальной задержкой на сетевые ошибки, 429 и 5xx (3 раза), затем запасная модель; JSON-режим; учёт токенов и стоимости |
+| `services/llm/pricing.py` | ✅ Цены моделей ProxyAPI (₽ за 1M токенов) для расчёта `cost_rub` |
+| `services/scenes.py` | ✅ `split_script()`: проверка ввода (≤ 5 000 символов, стиль, формат), автоопределение языка, целевое число сцен (≈ 6 с на сцену), Pydantic-схема `Storyboard`, проверка совпадения текста со сценарием (≥ 0,97), повторы с retry-промптом, кэш `storage/cache/llm/{sha256}.json` |
+| `services/styles.py` | ✅ Пресеты стилей из `prompts/style_presets.md` |
+| `app/cli.py` | ✅ `llm-models`, `smoke-llm`, `scenes` (пайплайн этапа 1 из командной строки) |
 | `services/images/` | `base.py` (интерфейс), `fal.py`, `proxyapi.py`, `crop.py`, `styles.py` (пресеты) |
 | `services/tts.py` | Edge TTS, word boundaries, SSML-паузы |
 | `services/subtitles.py` | Сборка SRT и ASS (по фразам и по словам) |

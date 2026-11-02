@@ -27,6 +27,7 @@ class Prompt:
     version: int
     meta: dict
     sections: dict[str, str] = field(default_factory=dict)
+    body: str = ""  # everything after the front matter (for data files without sections)
 
     def render(self, section: str, **variables: object) -> str:
         if section not in self.sections:
@@ -54,7 +55,13 @@ def parse_prompt(text: str) -> Prompt:
     for name, content in zip(parts[1::2], parts[2::2], strict=True):
         sections[name] = content.strip()
 
-    return Prompt(id=meta["id"], version=int(meta.get("version", 1)), meta=meta, sections=sections)
+    return Prompt(
+        id=meta["id"],
+        version=int(meta.get("version", 1)),
+        meta=meta,
+        sections=sections,
+        body=body,
+    )
 
 
 def load_prompt(prompt_id: str, prompts_dir: Path | None = None) -> Prompt:

@@ -1,10 +1,10 @@
 ---
 id: scene_split
-version: 1
+version: 2
 model: ${LLM_MODEL}          # Claude Haiku 5.5 via ProxyAPI
 temperature: 0.4
 response_format: json_object
-variables: [language, style_name, format, target_scene_count, script]
+variables: [language, style_name, format, target_scene_count, script, error]
 ---
 
 ## system
@@ -42,3 +42,6 @@ Script:
 """
 {{script}}
 """
+
+## retry
+Your answer was rejected: {{error}}. Return the corrected JSON only.

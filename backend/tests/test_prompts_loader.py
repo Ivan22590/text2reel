@@ -21,7 +21,8 @@ def test_scene_split_prompt_renders():
 
 
 @pytest.mark.parametrize(
-    "prompt_id", ["scene_split", "scene_regenerate", "image_prompt", "style_presets", "music_mood"]
+    "prompt_id",
+    ["scene_split", "scene_regenerate", "image_prompt", "style_presets", "music_mood", "smoke_llm"],
 )
 def test_all_prompt_files_parse(prompt_id):
     assert load_prompt(prompt_id).id == prompt_id

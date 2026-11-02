@@ -9,8 +9,9 @@
 | Компонент | Статус |
 |---|---|
 | Документация (ТЗ, архитектура, промпты, roadmap) | ✅ готово (черновик v0.1) |
-| Каркас (FastAPI, модели, Celery, React, Docker Compose, CI) | 🔄 написан, ждёт проверки на VPS |
-| Бэкенд-пайплайн (сцены → картинки → TTS → FFmpeg) | ⏳ не начат |
+| Каркас (FastAPI, модели, Celery, React, Docker Compose, CI) | 🔄 CI зелёный, ждёт проверки на VPS |
+| Этап 1: разбивка сценария на сцены (LLM через ProxyAPI) | 🔄 код и тесты готовы, ждёт прогона с ключом |
+| Этапы 2–4: картинки → TTS → FFmpeg | ⏳ не начаты |
 | Frontend | ⏳ не начат |
 | Музыка, шаблоны, брендинг | ⏳ не начат |
 | Деплой и демо | ⏳ не начат |
@@ -85,6 +86,13 @@ celery -A app.workers.celery_app worker -Q ai,render -l info   # нужен Redi
 
 # frontend
 cd frontend && npm install && npm run dev
+```
+
+### CLI
+```bash
+cd backend && source .venv/bin/activate
+python -m app.cli smoke-llm                                   # проверить ключ ProxyAPI и модели
+python -m app.cli scenes script.txt --style watercolor --format 9:16   # разбить сценарий на сцены
 ```
 
 ### Переменные окружения

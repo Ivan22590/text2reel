@@ -40,7 +40,10 @@ docker compose up --build                     # весь стек
 cd backend && source .venv/bin/activate && pytest   # тесты backend (в .venv)
 cd backend && ruff check . && ruff format .   # линт
 cd frontend && npm run dev | npm run lint
-python -m app.cli render script.txt --style anime --format 9:16   # пайплайн из CLI
+python -m app.cli smoke-llm | llm-models --filter haiku       # проверка ProxyAPI (платно, копейки)
+python -m app.cli scenes script.txt --style anime --format 9:16  # этап 1
+python -m app.cli render script.txt --style anime --format 9:16  # пайплайн целиком (этап 4, ещё нет)
+# без pip локально ruff можно скачать: gh release download -R astral-sh/ruff -p "ruff-x86_64-unknown-linux-gnu.tar.gz"
 ```
 
 ## Соглашения

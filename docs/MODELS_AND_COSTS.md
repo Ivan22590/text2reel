@@ -17,7 +17,13 @@ resp = client.chat.completions.create(model=settings.LLM_MODEL, messages=[...], 
 ```
 Авторизация: заголовок `Authorization: Bearer <PROXYAPI_KEY>`.
 
-> ⚠️ Точные идентификаторы моделей (`LLM_MODEL`) и base URL проверяем smoke-тестом на этапе 1 и записываем сюда.
+> ⚠️ Точные идентификаторы моделей (`LLM_MODEL`) и base URL нужно проверить с реальным ключом и записать сюда:
+> ```bash
+> python -m app.cli llm-models --filter haiku     # найти точный id
+> python -m app.cli llm-models --filter deepseek
+> python -m app.cli smoke-llm                     # запрос к обеим моделям: ответ, токены, ₽, время
+> ```
+> Цены для расчёта стоимости заданы в `backend/app/services/llm/pricing.py`; при смене модели обновить и его.
 
 ## 2. Выбор LLM
 
