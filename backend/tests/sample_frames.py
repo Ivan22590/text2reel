@@ -7,6 +7,7 @@ templates, fonts or branding. No network and no paid calls: images are drawn wit
 voice is a tone.
 """
 
+import io
 import subprocess
 import sys
 from pathlib import Path
@@ -55,9 +56,9 @@ def make_logo(path: Path) -> Path:
     draw = ImageDraw.Draw(image)
     draw.ellipse([10, 10, 290, 290], fill=(255, 60, 90, 255))
     draw.rectangle([110, 90, 190, 210], fill=(255, 255, 255, 255))
-    buf = path.with_suffix(".src.png")
-    image.save(buf)
-    save_logo(buf.read_bytes(), path)
+    buf = io.BytesIO()
+    image.save(buf, "PNG")
+    save_logo(buf.getvalue(), path)
     return path
 
 
