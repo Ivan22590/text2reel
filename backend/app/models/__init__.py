@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -45,6 +45,8 @@ class Project(Base):
     message: Mapped[str] = mapped_column(String(300), default="")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     cost_rub: Mapped[float] = mapped_column(Float, default=0.0)
+    # Seconds spent per pipeline step (scenes / images / render), for the KPI report.
+    timings_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -62,7 +64,9 @@ class Scene(Base):
     __tablename__ = "scenes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
     index: Mapped[int] = mapped_column(Integer)
     narration: Mapped[str] = mapped_column(Text)
     visual_prompt: Mapped[str] = mapped_column(Text, default="")
@@ -83,8 +87,11 @@ class RenderJob(Base):
     __tablename__ = "render_jobs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
     format: Mapped[str] = mapped_column(String(8))
+    draft: Mapped[bool] = mapped_column(Boolean, default=False)  # 480p preview
     status: Mapped[str] = mapped_column(String(16), default="queued")
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     step: Mapped[str] = mapped_column(String(32), default="")

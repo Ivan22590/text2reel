@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from app.config import Settings
 from app.services.branding import Branding, logo_path, save_logo
 from app.services.cards import build_card_scenes
 from app.services.compositor import (
@@ -11,10 +12,12 @@ from app.services.compositor import (
     audio_cmd,
     compose_cmd,
     compute_timeline,
+    encode_options,
     kenburns_cmd,
     logo_overlay,
     render_video,
 )
+from app.services.images.crop import DRAFT_SIZES, OUTPUT_SIZES
 from app.services.templates import get_template
 from tests.media import fake_words, make_image, make_tone, probe, requires_ffmpeg
 
@@ -245,3 +248,28 @@ def _png(width: int, height: int) -> bytes:
     buf = io.BytesIO()
     Image.new("RGBA", (width, height), (0, 160, 255, 255)).save(buf, "PNG")
     return buf.getvalue()
+
+
+def test_kenburns_upscale_factor(tmp_path):
+    cmd = kenburns_cmd(tmp_path / "a.png", tmp_path / "c.mp4", 1.0, (1080, 1920), "zoom_in",
+                       upscale=1.5)  # fmt: skip
+    assert arg_after(cmd, "-vf").startswith("scale=1620:2880,zoompan")
+
+
+def test_draft_profile_is_much_cheaper_than_final():
+    settings = Settings()
+    final, draft = encode_options(settings), encode_options(settings, draft=True)
+    assert (
+        final["preset"] == settings.ffmpeg_preset and final["clip_crf"] == settings.ffmpeg_clip_crf
+    )
+    assert draft["preset"] == draft["clip_preset"] == "ultrafast"
+    assert (
+        draft["fps"] == 24 and draft["crf"] > final["crf"] and draft["upscale"] < final["upscale"]
+    )
+
+
+def test_draft_sizes_keep_the_aspect_ratio_and_are_even():
+    for fmt, (w, h) in DRAFT_SIZES.items():
+        fw, fh = OUTPUT_SIZES[fmt]
+        assert w % 2 == 0 and h % 2 == 0 and min(w, h) == 480
+        assert abs(w / h - fw / fh) < 0.01

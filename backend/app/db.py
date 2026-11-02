@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.config import get_settings
+from app.config import BACKEND_DIR, get_settings
 
 
 class Base(DeclarativeBase):
@@ -28,11 +28,20 @@ engine = _make_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
-def init_db() -> None:
-    # Until Alembic migrations are added (stage 0 roadmap), create tables directly.
-    from app import models  # noqa: F401  (register models)
+def run_migrations(connection) -> None:
+    """Applies Alembic migrations (migrations/versions) on the given connection."""
+    from alembic import command
+    from alembic.config import Config
 
-    Base.metadata.create_all(engine)
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    config.attributes["connection"] = connection
+    command.upgrade(config, "head")
+
+
+def init_db() -> None:
+    with engine.begin() as connection:
+        run_migrations(connection)
 
 
 def get_db() -> Iterator[Session]:

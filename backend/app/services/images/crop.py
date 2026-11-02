@@ -7,6 +7,8 @@ from PIL import Image, ImageFilter
 # Output frame per format, and the ~1 MP size requested from the generator
 # (multiples of 64, close to the target aspect ratio).
 OUTPUT_SIZES = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080)}
+# 480p preview (short side 480, even sizes for H.264).
+DRAFT_SIZES = {"9:16": (480, 854), "16:9": (854, 480), "1:1": (480, 480)}
 GENERATION_SIZES = {"9:16": (768, 1344), "16:9": (1344, 768), "1:1": (1024, 1024)}
 
 

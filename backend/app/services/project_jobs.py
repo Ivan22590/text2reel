@@ -6,6 +6,7 @@ polls it, so no extra message bus is needed.
 """
 
 import logging
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,8 +17,8 @@ from app.models import Project, ProjectStatus, RenderJob, Scene
 from app.services import providers
 from app.services.branding import Branding, logo_path
 from app.services.cards import build_card_scenes
-from app.services.compositor import RenderScene, compute_timeline, render_video
-from app.services.images.crop import OUTPUT_SIZES
+from app.services.compositor import RenderScene, compute_timeline, encode_options, render_video
+from app.services.images.crop import DRAFT_SIZES, OUTPUT_SIZES
 from app.services.images.generator import generate_scene_image
 from app.services.images.prompting import build_prompts
 from app.services.music import Track, resolve_music
@@ -84,6 +85,7 @@ def analyze_project(db: Session, project_id: int) -> None:
     project = db.get(Project, project_id)
     project.error = None
     set_progress(db, project, "scenes", 2, "Разбиваем сценарий на сцены", ProjectStatus.analyzing)
+    started = time.monotonic()
     try:
         result = split_script(
             project.script, style=project.style, format=project.format,
@@ -105,6 +107,8 @@ def analyze_project(db: Session, project_id: int) -> None:
         )  # fmt: skip
     project.style_bible = result.storyboard.style_bible.model_dump()
     project.cost_rub += result.usage.cost_rub
+    # New scenes make earlier image/render timings meaningless.
+    project.timings_json = {"scenes": round(time.monotonic() - started, 2)}
     count = len(result.storyboard.scenes)
     set_progress(db, project, "scenes", 100, f"Сцен: {count}", ProjectStatus.scenes_ready)
 
@@ -150,6 +154,7 @@ def generate_assets(db: Session, project_id: int, scene_ids: list[int] | None = 
         if (not scene_ids or s.id in scene_ids) and not (s.image_path and s.audio_path)
     ]  # fmt: skip
     set_progress(db, project, "images", 0, "Готовим сцены", ProjectStatus.generating)
+    started = time.monotonic()
     provider, engine = providers.image_provider(), providers.tts_engine()
     failed = []
     for n, scene in enumerate(targets, start=1):
@@ -171,6 +176,11 @@ def generate_assets(db: Session, project_id: int, scene_ids: list[int] | None = 
     if failed:
         _fail(db, project, "Не все сцены готовы — " + "; ".join(failed), ProjectStatus.scenes_ready)
     else:
+        if not scene_ids:  # a full pass, not the regeneration of one scene
+            project.timings_json = {
+                **project.timings_json,
+                "images": round(time.monotonic() - started, 2),
+            }
         set_progress(db, project, "images", 100, "Сцены готовы", ProjectStatus.assets_ready)
 
 
@@ -231,6 +241,9 @@ def render_project(db: Session, job_id: int, size: tuple[int, int] | None = None
     project.error = None
     job.status, job.started_at = "running", datetime.now(UTC)
     set_progress(db, project, "render", 5, "Монтируем видео", ProjectStatus.rendering)
+    started = time.monotonic()
+    if job.draft and size is None:
+        size = DRAFT_SIZES[job.format]
     try:
         scenes = _render_scenes(project)
         template = get_template(job.format)
@@ -245,8 +258,7 @@ def render_project(db: Session, job_id: int, size: tuple[int, int] | None = None
         result = render_video(
             scenes, out_dir, job.format, size=size, template=template, branding=branding,
             logo=logo, intro=intro, outro=outro, music=track.path if track else None,
-            pause=settings.tts_scene_pause_sec, fps=settings.render_fps,
-            preset=settings.ffmpeg_preset, concurrency=settings.render_concurrency,
+            pause=settings.tts_scene_pause_sec, **encode_options(settings, draft=job.draft),
         )  # fmt: skip
     except Exception as exc:
         log.exception("render job %s failed", job_id)
@@ -256,7 +268,12 @@ def render_project(db: Session, job_id: int, size: tuple[int, int] | None = None
     job.status, job.progress, job.finished_at = "done", 100.0, datetime.now(UTC)
     job.output_path, job.srt_path = str(result.video), str(result.srt)
     job.images_count = len(scenes)
-    job.cost_rub = project.cost_rub
+    job.cost_rub = project.cost_rub  # what the project has cost so far
+    if not job.draft:  # the KPI is about the final render
+        project.timings_json = {
+            **project.timings_json,
+            "render": round(time.monotonic() - started, 2),
+        }
     set_progress(db, project, "render", 100, "Видео готово", ProjectStatus.done)
 
 

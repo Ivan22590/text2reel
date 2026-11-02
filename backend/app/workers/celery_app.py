@@ -4,6 +4,7 @@ See docs/ARCHITECTURE.md §1–2.
 """
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.config import get_settings
 
@@ -20,6 +21,9 @@ celery_app.conf.update(
     task_routes={
         "app.workers.tasks.ai.*": {"queue": "ai"},
         "app.workers.tasks.render.*": {"queue": "render"},
+    },
+    beat_schedule={
+        "cleanup": {"task": "app.workers.tasks.ai.cleanup", "schedule": crontab(hour=3, minute=15)},
     },
     task_acks_late=True,
     worker_prefetch_multiplier=1,

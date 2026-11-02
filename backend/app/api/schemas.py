@@ -58,6 +58,7 @@ class RegenerateRequest(BaseModel):
 
 class RenderRequest(BaseModel):
     format: Format | None = None
+    draft: bool = False  # fast 480p preview
 
 
 class SceneOut(BaseModel):
@@ -77,6 +78,7 @@ class SceneOut(BaseModel):
 class RenderJobOut(BaseModel):
     id: int
     format: str
+    draft: bool
     status: str
     error: str | None
     video_url: str | None
@@ -128,7 +130,7 @@ def scene_out(s) -> SceneOut:
 
 def job_out(j) -> RenderJobOut:
     return RenderJobOut(
-        id=j.id, format=j.format, status=j.status, error=j.error,
+        id=j.id, format=j.format, draft=j.draft, status=j.status, error=j.error,
         video_url=file_url(j.output_path), srt_url=file_url(j.srt_path),
         started_at=j.started_at, finished_at=j.finished_at, cost_rub=j.cost_rub,
     )  # fmt: skip

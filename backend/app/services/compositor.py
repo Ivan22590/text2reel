@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from app.config import Settings
 from app.services.branding import Branding, fonts_dir
 from app.services.images.crop import OUTPUT_SIZES
 from app.services.subtitles import (
@@ -120,12 +121,13 @@ def kenburns_cmd(
     fps: int = 30,
     preset: str = "veryfast",
     crf: int = 20,
+    upscale: float = 2.0,
 ) -> list[str]:
     width, height = size
     frames = max(1, round(duration * fps))
-    # Upscale 2x first: zoompan rounds coordinates to whole pixels, which jitters otherwise.
+    # Upscale first: zoompan rounds coordinates to whole pixels, which jitters otherwise.
     vf = (
-        f"scale={2 * width}:{2 * height},"
+        f"scale={round(upscale * width)}:{round(upscale * height)},"
         f"{_zoompan(camera, frames, zoom)}:d={frames}:s={width}x{height}:fps={fps},format=yuv420p"
     )
     return [
@@ -278,6 +280,29 @@ def run_ffmpeg(cmd: list[str], cwd: Path | None = None) -> None:
         raise CompositorError(f"ffmpeg failed ({proc.returncode}): {tail}")
 
 
+# 480p preview (FR-7.5): speed over quality; no paid calls either way.
+DRAFT_ENCODE = {
+    "fps": 24, "preset": "ultrafast", "clip_preset": "ultrafast",
+    "clip_crf": 28, "crf": 30, "upscale": 1.25,
+}  # fmt: skip
+
+
+def encode_options(settings: Settings, draft: bool = False) -> dict:
+    """FFmpeg quality/speed knobs for `render_video`, from settings (or the draft profile)."""
+    if draft:
+        return {**DRAFT_ENCODE, "fps": min(settings.render_fps, 24),
+                "concurrency": settings.render_concurrency}  # fmt: skip
+    return {
+        "fps": settings.render_fps,
+        "preset": settings.ffmpeg_preset,
+        "crf": settings.ffmpeg_crf,
+        "clip_preset": settings.ffmpeg_clip_preset,
+        "clip_crf": settings.ffmpeg_clip_crf,
+        "upscale": settings.ffmpeg_upscale,
+        "concurrency": settings.render_concurrency,
+    }
+
+
 def _scaled_style(style: SubtitleStyle, height: int, full_height: int) -> SubtitleStyle:
     if height == full_height:
         return style
@@ -306,6 +331,10 @@ def render_video(
     pause: float = 0.4,
     fps: int = 30,
     preset: str = "veryfast",
+    crf: int = 21,
+    clip_preset: str | None = None,
+    clip_crf: int = 20,
+    upscale: float = 2.0,
     concurrency: int = 2,
     subtitle_style: SubtitleStyle | None = None,
     fontsdir: Path | None = None,
@@ -332,7 +361,8 @@ def render_video(
     commands = [
         kenburns_cmd(
             scene.image.resolve(), clip, duration, (width, height), scene.camera,
-            zoom=template.ken_burns_zoom, fps=fps, preset=preset,
+            zoom=template.ken_burns_zoom, fps=fps, preset=clip_preset or preset, crf=clip_crf,
+            upscale=upscale,
         )
         for scene, clip, duration in zip(sequence, clips, timeline.clip_durations, strict=True)
     ]  # fmt: skip
@@ -379,7 +409,7 @@ def render_video(
     run_ffmpeg(
         compose_cmd(
             clips, timeline, audio, ass.name, video, transition=template.transition.type,
-            transition_sec=transition_sec, logo=overlay, fontsdir=fontsdir, preset=preset,
+            transition_sec=transition_sec, logo=overlay, fontsdir=fontsdir, preset=preset, crf=crf,
         ),
         cwd=out_dir,
     )  # fmt: skip

@@ -313,3 +313,26 @@ def test_branded_render_matches_planned_timeline(client, fakes):
     url = after["renders"][0]["video_url"]
     video = get_settings().storage_dir / url.split("/api/files/")[1].split("?")[0]
     assert float(probe(video)["format"]["duration"]) == pytest.approx(planned, abs=0.3)
+
+
+@requires_ffmpeg
+@pytest.mark.ffmpeg
+def test_draft_render_is_a_480p_preview(client, fakes):
+    fakes.tts = ToneTTSEngine()
+    pid = generated(client)["id"]
+    resp = client.post(f"/api/projects/{pid}/render", json={"draft": True})
+    assert resp.status_code == 202 and resp.json()["draft"] is True
+    after = client.get(f"/api/projects/{pid}").json()
+    assert after["status"] == "done", after["error"]
+    job = after["renders"][0]
+    assert job["draft"] is True
+    video = get_settings().storage_dir / job["video_url"].split("/api/files/")[1].split("?")[0]
+    stream = probe(video)["streams"][0]
+    assert (stream["width"], stream["height"]) == (480, 854)
+
+
+def test_pipeline_timings_are_recorded_for_the_kpi_report(client):
+    project = generated(client)
+    with SessionLocal() as db:
+        timings = db.get(Project, project["id"]).timings_json
+    assert set(timings) == {"scenes", "images"} and all(v >= 0 for v in timings.values())

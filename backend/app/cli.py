@@ -8,6 +8,8 @@ python -m app.cli tts storyboard.json --voice ru-RU-SvetlanaNeural --format 9:16
 python -m app.cli compose --storyboard storyboard.json --images out/ --narration out/narration.json
 python -m app.cli render script.txt --style anime --format 9:16 --out-dir out/   # everything
 python -m app.cli music                          # background music library
+python -m app.cli cleanup                        # delete expired projects and old cache
+python -m app.cli stats [--json]                 # KPI report from the database
 """
 
 import argparse
@@ -17,18 +19,21 @@ import time
 from pathlib import Path
 
 from app.config import get_settings
+from app.db import SessionLocal
 from app.prompts.loader import load_prompt
 from app.services.branding import FONTS, Branding
 from app.services.cards import build_card_scenes
-from app.services.compositor import RenderScene, render_video
+from app.services.cleanup import cleanup_expired
+from app.services.compositor import RenderScene, encode_options, render_video
 from app.services.images import get_provider
-from app.services.images.crop import OUTPUT_SIZES
+from app.services.images.crop import DRAFT_SIZES, OUTPUT_SIZES
 from app.services.images.generator import generate_images
 from app.services.images.prompting import build_prompts
 from app.services.llm.client import LLMClient, LLMError
 from app.services.music import is_valid_choice, load_catalog, resolve_music
 from app.services.pipeline import PipelineError, run_pipeline
 from app.services.scenes import FORMATS, Storyboard, split_script
+from app.services.stats import compute_stats
 from app.services.styles import get_style, load_style_presets
 from app.services.subtitles import build_cues, place_on_timeline, to_ass, to_srt
 from app.services.templates import get_template
@@ -59,6 +64,34 @@ def cmd_music(_: argparse.Namespace) -> int:
         mins, secs = divmod(int(track.duration), 60)
         moods = ",".join(track.moods)
         print(f"{track.id:28} {mins}:{secs:02d}  {moods:20} {track.title} - {track.artist}")
+    return 0
+
+
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    with SessionLocal() as db:
+        report = cleanup_expired(db, ttl_days=args.ttl_days)
+    print(
+        f"projects deleted: {report.projects} | cache files: {report.cache_files} | "
+        f"freed: {report.freed_bytes / 1e6:.1f} MB | stuck jobs recovered: {report.recovered}"
+    )
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    with SessionLocal() as db:
+        stats = compute_stats(db)
+    if args.json:
+        print(json.dumps(stats, ensure_ascii=False, indent=2))
+        return 0
+    final, spread = stats["render_final"], stats["pipeline_seconds"]
+    print(f"projects: {stats['projects']['total']} {stats['projects']['by_status']}")
+    print(
+        f"final renders: {final['done']} done, {final['failed']} failed, "
+        f"success rate {final['success_rate']}"
+    )
+    print(f"  render seconds: {final['seconds']}")
+    print(f"K1 pipeline seconds (scenes+images+render): {spread}")
+    print(f"K2 cost, RUB: {stats['cost_rub']}")
     return 0
 
 
@@ -200,9 +233,8 @@ def cmd_compose(args: argparse.Namespace) -> int:
     template = get_template(args.format)
     branding, logo = _branding_args(args)
     out_dir = Path(args.out_dir)
-    intro, outro = build_card_scenes(
-        branding, template, OUTPUT_SIZES[args.format], out_dir / "work", logo
-    )
+    size = DRAFT_SIZES[args.format] if args.draft else OUTPUT_SIZES[args.format]
+    intro, outro = build_card_scenes(branding, template, size, out_dir / "work", logo)
     music = _music_arg(args.music)
     if isinstance(music, Path):
         music_file = music
@@ -211,10 +243,9 @@ def cmd_compose(args: argparse.Namespace) -> int:
         track = resolve_music(music, moods, args.seed)
         music_file = track.path if track else None
     result = render_video(
-        scenes, out_dir, args.format, template=template, branding=branding, logo=logo,
+        scenes, out_dir, args.format, size=size, template=template, branding=branding, logo=logo,
         intro=intro, outro=outro, music=music_file, pause=settings.tts_scene_pause_sec,
-        fps=settings.render_fps, preset=settings.ffmpeg_preset,
-        concurrency=settings.render_concurrency,
+        **encode_options(settings, draft=args.draft),
     )  # fmt: skip
     steps = " | ".join(f"{name} {sec:.1f}s" for name, sec in result.timings.items())
     print(f"{result.video} ({result.duration:.1f}s) | {steps}")
@@ -296,6 +327,14 @@ def build_parser() -> argparse.ArgumentParser:
     tts.add_argument("--no-cache", action="store_true")
     tts.set_defaults(func=cmd_tts)
 
+    cleanup = sub.add_parser("cleanup", help="delete expired projects and old cache files")
+    cleanup.add_argument("--ttl-days", type=int, default=None, help="default: STORAGE_TTL_DAYS")
+    cleanup.set_defaults(func=cmd_cleanup)
+
+    stats = sub.add_parser("stats", help="KPI report (time, cost, success rate) from the database")
+    stats.add_argument("--json", action="store_true")
+    stats.set_defaults(func=cmd_stats)
+
     music = sub.add_parser("music", help="list the background music library")
     music.set_defaults(func=cmd_music)
 
@@ -305,6 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
     compose.add_argument("--narration", required=True, help="narration.json from `tts`")
     compose.add_argument("--format", default="9:16", choices=FORMATS)
     compose.add_argument("--seed", type=int, default=42, help="seed for the automatic music pick")
+    compose.add_argument("--draft", action="store_true", help="fast 480p preview")
     _add_music_and_branding_args(compose)
     compose.add_argument("--out-dir", default="out")
     compose.set_defaults(func=cmd_compose)

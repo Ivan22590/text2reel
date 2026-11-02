@@ -14,3 +14,10 @@ def test_celery_ping_eager():
     from app.workers.celery_app import ping
 
     assert ping.delay().get() == "pong"
+
+
+def test_cleanup_task_runs_and_reports():
+    from app.workers.tasks import cleanup
+
+    report = cleanup.delay().get()
+    assert set(report) == {"projects", "cache_files", "freed_bytes", "recovered"}

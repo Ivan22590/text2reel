@@ -275,7 +275,7 @@ def render(
         raise HTTPException(409, "Не у всех сцен есть картинка и озвучка")
     if body.format and body.format != project.format:
         raise HTTPException(409, "Смените формат проекта и перегенерируйте кадры")
-    job = RenderJob(project_id=project.id, format=project.format)
+    job = RenderJob(project_id=project.id, format=project.format, draft=body.draft)
     db.add(job)
     project.status, project.step, project.progress = ProjectStatus.rendering, "render", 0
     db.commit()

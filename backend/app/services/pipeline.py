@@ -14,7 +14,7 @@ from pathlib import Path
 from app.config import Settings, get_settings
 from app.services.branding import Branding
 from app.services.cards import build_card_scenes
-from app.services.compositor import RenderScene, render_video
+from app.services.compositor import RenderScene, encode_options, render_video
 from app.services.images import ImageProvider, get_provider
 from app.services.images.crop import OUTPUT_SIZES
 from app.services.images.generator import generate_images
@@ -167,8 +167,7 @@ def run_pipeline(
     rendered = render_video(
         scenes, out_dir, format, size=size, template=template, branding=branding, logo=logo,
         intro=intro, outro=outro, music=music_file, pause=settings.tts_scene_pause_sec,
-        fps=settings.render_fps, preset=settings.ffmpeg_preset,
-        concurrency=settings.render_concurrency,
+        **encode_options(settings),
     )  # fmt: skip
     steps.append(
         StepReport(

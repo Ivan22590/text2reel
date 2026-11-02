@@ -5,12 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api import auth, health, projects
+from app.config import get_settings
 from app.db import init_db
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_db()
+    if get_settings().auto_migrate:
+        init_db()
     yield
 
 

@@ -44,9 +44,14 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     database_url: str = "sqlite:///./storage/app.db"
     storage_dir: Path = Path("./storage")
-    storage_ttl_days: int = 7
+    storage_ttl_days: int = 7  # 0 turns the cleanup off (e.g. while the demo must stay)
+    auto_migrate: bool = True  # api applies migrations at start; off in prod (`migrate` service)
     render_concurrency: int = 2
-    ffmpeg_preset: str = "veryfast"
+    ffmpeg_preset: str = "veryfast"  # final encode (xfade + subtitles + mux)
+    ffmpeg_crf: int = 21
+    ffmpeg_clip_preset: str = "veryfast"  # per-scene Ken Burns clips (re-encoded in the final pass)
+    ffmpeg_clip_crf: int = 20
+    ffmpeg_upscale: float = 2.0  # zoompan works on frames upscaled by this factor
     render_fps: int = 30
 
     # Run Celery tasks inline (no broker); used in tests.

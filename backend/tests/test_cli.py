@@ -42,3 +42,12 @@ def test_branding_arguments(tmp_path):
     branding, logo = cli._branding_args(args)
     assert branding.accent_color == "#00FF00" and branding.intro_text == "from file"
     assert branding.outro_text == "Bye" and branding.font == "Lobster" and str(logo) == "logo.png"
+
+
+def test_cleanup_and_stats_commands(capsys):
+    assert cli.main(["cleanup", "--ttl-days", "0"]) == 0
+    assert "projects deleted: 0" in capsys.readouterr().out
+    assert cli.main(["stats", "--json"]) == 0
+    stats = json.loads(capsys.readouterr().out)
+    assert {"projects", "render_final", "pipeline_seconds", "cost_rub"} <= set(stats)
+    assert cli.main(["stats"]) == 0 and "K1 pipeline seconds" in capsys.readouterr().out
