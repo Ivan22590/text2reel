@@ -1,0 +1,14 @@
+Text2Reel
+Copyright (c) 2026 Ivan Levdikov — MIT License (see LICENSE)
+
+This project includes code adapted from third-party open-source projects:
+
+1. MoneyPrinterTurbo — https://github.com/harry0703/MoneyPrinterTurbo
+   Copyright (c) harry0703 and contributors
+   License: MIT
+   Used for: Edge TTS integration with word boundaries, subtitle generation,
+   audio mixing recipes. Adapted files carry a header pointing to the source.
+   (List of adapted files will be maintained here.)
+
+Third-party assets (music, fonts) are listed with their licenses in
+assets/music/LICENSES.md and assets/fonts/LICENSES.md.
