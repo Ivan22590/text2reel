@@ -46,3 +46,54 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  stack-dev:
+    name: "stack (docker compose, dev)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose up -d --build
+      - name: Wait for the API
+        run: |
+          for i in $(seq 1 60); do curl -fsS http://localhost:8000/api/health && break; sleep 3; done
+          curl -fsS http://localhost:8000/api/health
+      - run: scripts/smoke_stack.sh http://localhost:8000 http://localhost:5173 demo change-me
+      - name: Worker queues are consumed
+        run: |
+          docker compose logs worker-ai | grep -E "ready|Connected to redis"
+          docker compose logs worker-render | grep -E "ready|Connected to redis"
+          docker compose logs beat | grep -E "beat: Starting"
+      - name: Logs
+        if: failure()
+        run: docker compose logs --no-color --tail=150
+
+  stack-prod:
+    name: "stack (docker compose, prod - Postgres + Caddy)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COMPOSE: docker compose -f docker-compose.yml -f docker-compose.prod.yml
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prod .env
+        run: |
+          cp .env.example .env
+          sed -i -e 's/^APP_ENV=.*/APP_ENV=prod/' -e 's/^DOMAIN=.*/DOMAIN=localhost/' \
+            -e 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-postgres-pass/' \
+            -e 's/^DEMO_PASSWORD=.*/DEMO_PASSWORD=ci-demo-pass/' -e 's/^SECRET_KEY=.*/SECRET_KEY=ci-secret-key/' .env
+      - run: $COMPOSE config --quiet
+      - run: $COMPOSE up -d --build
+      - name: Wait for HTTPS
+        run: |
+          for i in $(seq 1 60); do curl -ksf https://localhost/api/health && break; sleep 3; done
+          curl -ksf https://localhost/api/health
+      - run: scripts/smoke_stack.sh https://localhost https://localhost demo ci-demo-pass -k
+      - name: Schema comes from migrations (PostgreSQL)
+        run: |
+          $COMPOSE exec -T postgres psql -U text2reel -d text2reel -c '\dt'
+          $COMPOSE exec -T postgres psql -U text2reel -d text2reel -tAc 'select version_num from alembic_version' | grep -x 0001
+      - name: Logs
+        if: failure()
+        run: $COMPOSE logs --no-color --tail=150

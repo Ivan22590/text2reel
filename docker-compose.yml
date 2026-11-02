@@ -1,4 +1,4 @@
-# Dev stack: docker compose up --build
+# Dev stack: docker compose up --build   (UI http://localhost:5173, API http://localhost:8000)
 x-backend: &backend
   build: ./backend
   env_file: .env
@@ -18,6 +18,12 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   worker-ai:
     <<: *backend
@@ -26,6 +32,11 @@ services:
   worker-render:
     <<: *backend
     command: celery -A app.workers.celery_app worker -Q render -c ${RENDER_CONCURRENCY:-2} -n render@%h -l info
+
+  # Daily housekeeping (expired projects, old cache, stuck jobs): the `cleanup` task
+  beat:
+    <<: *backend
+    command: celery -A app.workers.celery_app beat -s /data/celerybeat-schedule -l info
 
   redis:
     image: redis:7.4-alpine

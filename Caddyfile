@@ -1,9 +1,12 @@
 {$DOMAIN} {
-	encode gzip
 	handle /api/* {
-		reverse_proxy api:8000
+		# no buffering: the SSE progress stream must reach the browser immediately
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
 	}
 	handle {
+		encode gzip
 		root * /srv/frontend
 		try_files {path} /index.html
 		file_server

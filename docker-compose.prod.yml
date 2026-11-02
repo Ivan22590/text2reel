@@ -1,25 +1,47 @@
 # Prod overrides: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Differences from dev: code comes from the image (no bind mounts), PostgreSQL, migrations in a
+# one-shot `migrate` service, static frontend served by Caddy with HTTPS, restart policies.
+x-prod-env: &prod-env
+  APP_ENV: prod
+  AUTO_MIGRATE: "false"   # only the `migrate` service touches the schema
+  REDIS_URL: redis://redis:6379/0
+  DATABASE_URL: postgresql+psycopg://text2reel:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/text2reel
+  STORAGE_DIR: /data
+
 x-prod-backend: &prod-backend
-  environment:
-    APP_ENV: prod
-    REDIS_URL: redis://redis:6379/0
-    DATABASE_URL: postgresql+psycopg://text2reel:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/text2reel
-    STORAGE_DIR: /data
-  volumes:
+  environment: *prod-env
+  volumes: !override
     - storage:/data
   restart: unless-stopped
+  depends_on: !override
+    redis:
+      condition: service_started
+    migrate:
+      condition: service_completed_successfully
 
 services:
+  migrate:
+    build: ./backend
+    env_file: .env
+    environment: *prod-env
+    command: alembic upgrade head
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     <<: *prod-backend
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
     ports: !reset []
-    depends_on: [redis, postgres]
 
   worker-ai:
     <<: *prod-backend
 
   worker-render:
+    <<: *prod-backend
+
+  beat:
     <<: *prod-backend
 
   redis:
@@ -33,13 +55,18 @@ services:
       POSTGRES_DB: text2reel
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U text2reel -d text2reel"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
     restart: unless-stopped
 
   frontend:
-    # build static bundle once; Caddy serves it from the shared volume
+    # build the static bundle once; Caddy serves it from the shared volume
     command: sh -c "npm run build && rm -rf /srv/frontend/* && cp -r dist/. /srv/frontend/"
     ports: !reset []
-    volumes:
+    volumes: !override
       - frontend_dist:/srv/frontend
     restart: "no"
 
@@ -54,7 +81,9 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - frontend_dist:/srv/frontend:ro
       - caddy_data:/data
-    depends_on: [api]
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
