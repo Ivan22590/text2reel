@@ -26,8 +26,13 @@ class Settings(BaseSettings):
     image_provider: str = "fal"
     fal_key: str = ""
     fal_model: str = "fal-ai/flux/schnell"
+    fal_cost_usd_per_mp: float = 0.003
     proxyapi_image_model: str = ""
+    proxyapi_image_cost_rub: float = 0.0  # per image, fill in after the stage 2 comparison
     image_concurrency: int = 4
+    image_timeout_sec: int = 90
+    image_fit: str = "cover"  # cover | blur
+    usd_rub: float = 100.0  # for cost reporting of USD-priced providers
 
     tts_provider: str = "edge"
     tts_voice: str = "ru-RU-SvetlanaNeural"

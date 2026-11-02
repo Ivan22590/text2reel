@@ -69,7 +69,17 @@ resp = client.chat.completions.create(model=settings.LLM_MODEL, messages=[...], 
 
 **Решение:** провайдер задаётся в `IMAGE_PROVIDER`. На этапе 2 генерируем 10 кадров у Fal.ai FLUX schnell и ProxyAPI FLUX Klein, сравниваем цену за кадр, скорость и консистентность. Результат записываем сюда.
 
-Оценка: 10 кадров × около 2 МП × $0,003 ≈ $0,06 ≈ **6 ₽** (при курсе около 100 ₽/$). Генерируем в 1–1,5 МП и апскейлим при кадрировании, чтобы удержаться в ≈ 3–4 ₽.
+**Реализовано:** генерируем около 1 МП (9:16 → 768×1344, 16:9 → 1344×768, 1:1 → 1024×1024) и масштабируем при кадрировании до 1080p. Это ≈ 1,03 МП × $0,003 × 100 ₽/$ ≈ **0,3 ₽ за кадр**, ≈ **3 ₽ за 10 кадров**. Кэш не даёт платить повторно за тот же кадр.
+
+Параметры стоимости в `.env`: `FAL_COST_USD_PER_MP`, `USD_RUB`, `PROXYAPI_IMAGE_COST_RUB` (цена за картинку у ProxyAPI заполняется после пробного прогона).
+
+**Пробный прогон для выбора провайдера** (на VPS, около 10 кадров, примерно 3–15 ₽):
+```bash
+python -m app.cli scenes examples/scripts/01.txt --style watercolor --format 9:16 --out sb.json
+IMAGE_PROVIDER=fal      python -m app.cli images sb.json --style watercolor --out-dir out/fal --no-cache
+IMAGE_PROVIDER=proxyapi PROXYAPI_IMAGE_MODEL=<id> python -m app.cli images sb.json --style watercolor --out-dir out/proxyapi --no-cache
+```
+Сравниваем время, ₽ и консистентность, вывод записываем в таблицу истории.
 
 ## 4. Синтез речи
 
@@ -94,3 +104,4 @@ resp = client.chat.completions.create(model=settings.LLM_MODEL, messages=[...], 
 | Дата | Изменение |
 |---|---|
 | 2026-11-02 | LLM через ProxyAPI: Claude Haiku 5.5 (основная) и DeepSeek V4.1 Flash (запасная). Картинки: Fal.ai FLUX schnell до сравнения с ProxyAPI. TTS: Edge TTS |
+| 2026-11-02 | Размер генерации около 1 МП с масштабированием до 1080p; оценка ≈ 0,3 ₽ за кадр у Fal.ai |

@@ -11,7 +11,8 @@
 | Документация (ТЗ, архитектура, промпты, roadmap) | ✅ готово (черновик v0.1) |
 | Каркас (FastAPI, модели, Celery, React, Docker Compose, CI) | 🔄 CI зелёный, ждёт проверки на VPS |
 | Этап 1: разбивка сценария на сцены (LLM через ProxyAPI) | 🔄 код и тесты готовы, ждёт прогона с ключом |
-| Этапы 2–4: картинки → TTS → FFmpeg | ⏳ не начаты |
+| Этап 2: генерация картинок (Fal.ai / ProxyAPI) | 🔄 код и тесты готовы, ждёт прогона с ключом |
+| Этапы 3–4: TTS → FFmpeg | ⏳ не начаты |
 | Frontend | ⏳ не начат |
 | Музыка, шаблоны, брендинг | ⏳ не начат |
 | Деплой и демо | ⏳ не начат |
@@ -92,7 +93,8 @@ cd frontend && npm install && npm run dev
 ```bash
 cd backend && source .venv/bin/activate
 python -m app.cli smoke-llm                                   # проверить ключ ProxyAPI и модели
-python -m app.cli scenes script.txt --style watercolor --format 9:16   # разбить сценарий на сцены
+python -m app.cli scenes script.txt --style watercolor --format 9:16 --out sb.json   # разбить сценарий на сцены
+python -m app.cli images sb.json --style watercolor --format 9:16 --out-dir out/       # картинка на каждую сцену
 ```
 
 ### Переменные окружения

@@ -2,7 +2,8 @@
 
 python -m app.cli llm-models [--filter haiku]    # list model ids available in ProxyAPI
 python -m app.cli smoke-llm                      # one cheap request to primary + fallback
-python -m app.cli scenes script.txt --style anime --format 9:16
+python -m app.cli scenes script.txt --style anime --format 9:16 --out storyboard.json
+python -m app.cli images storyboard.json --style anime --format 9:16 --out-dir out/
 """
 
 import argparse
@@ -12,9 +13,12 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.prompts.loader import load_prompt
+from app.services.images import get_provider
+from app.services.images.generator import generate_images
+from app.services.images.prompting import build_prompts
 from app.services.llm.client import LLMClient, LLMError
-from app.services.scenes import FORMATS, split_script
-from app.services.styles import load_style_presets
+from app.services.scenes import FORMATS, Storyboard, split_script
+from app.services.styles import get_style, load_style_presets
 
 
 def cmd_llm_models(args: argparse.Namespace) -> int:
@@ -71,6 +75,35 @@ def cmd_scenes(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_images(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    storyboard = Storyboard.model_validate_json(Path(args.storyboard).read_text(encoding="utf-8"))
+    prompts, negative = build_prompts(storyboard, get_style(args.style))
+    started = time.monotonic()
+    results = generate_images(
+        prompts,
+        negative_prompt=negative,
+        format=args.format,
+        seed=args.seed,
+        out_dir=Path(args.out_dir),
+        provider=get_provider(settings),
+        cache_dir=None if args.no_cache else settings.storage_dir / "cache" / "images",
+        concurrency=settings.image_concurrency,
+        fit=args.fit or settings.image_fit,
+    )
+    for item in results:
+        status = f"OK {item.path}" + (" (cache)" if item.cached else "") if item.ok else item.error
+        print(f"scene {item.index:02d}: {status}")
+    failed = sum(not item.ok for item in results)
+    total = sum(item.cost_rub for item in results)
+    print(
+        f"images: {len(results) - failed}/{len(results)} | {total:.2f} RUB | "
+        f"{time.monotonic() - started:.1f}s",
+        file=sys.stderr,
+    )
+    return 1 if failed else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -90,6 +123,16 @@ def build_parser() -> argparse.ArgumentParser:
     scenes.add_argument("--out", default=None, help="write JSON to file instead of stdout")
     scenes.add_argument("--no-cache", action="store_true")
     scenes.set_defaults(func=cmd_scenes)
+
+    images = sub.add_parser("images", help="generate one image per scene of a storyboard JSON")
+    images.add_argument("storyboard", help="JSON produced by `scenes --out`")
+    images.add_argument("--style", default="realism", choices=sorted(load_style_presets()))
+    images.add_argument("--format", default="9:16", choices=FORMATS)
+    images.add_argument("--seed", type=int, default=42)
+    images.add_argument("--out-dir", default="out")
+    images.add_argument("--fit", choices=("cover", "blur"), default=None)
+    images.add_argument("--no-cache", action="store_true")
+    images.set_defaults(func=cmd_images)
     return parser
 
 

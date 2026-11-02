@@ -92,8 +92,13 @@ RenderJob
 | `services/llm/pricing.py` | ✅ Цены моделей ProxyAPI (₽ за 1M токенов) для расчёта `cost_rub` |
 | `services/scenes.py` | ✅ `split_script()`: проверка ввода (≤ 5 000 символов, стиль, формат), автоопределение языка, целевое число сцен (≈ 6 с на сцену), Pydantic-схема `Storyboard`, проверка совпадения текста со сценарием (≥ 0,97), повторы с retry-промптом, кэш `storage/cache/llm/{sha256}.json` |
 | `services/styles.py` | ✅ Пресеты стилей из `prompts/style_presets.md` |
-| `app/cli.py` | ✅ `llm-models`, `smoke-llm`, `scenes` (пайплайн этапа 1 из командной строки) |
-| `services/images/` | `base.py` (интерфейс), `fal.py`, `proxyapi.py`, `crop.py`, `styles.py` (пресеты) |
+| `app/cli.py` | ✅ `llm-models`, `smoke-llm`, `scenes` (этап 1), `images` (этап 2) |
+| `services/images/base.py` | ✅ Интерфейс провайдера: `ImageRequest` (prompt, negative, размер, seed) → `ImageResult` (байты, ₽) |
+| `services/images/fal.py` | ✅ Fal.ai: `POST https://fal.run/<FAL_MODEL>`, `Authorization: Key …`, скачивание по URL. У FLUX schnell нет negative prompt |
+| `services/images/proxyapi.py` | ✅ ProxyAPI Images API (OpenAI SDK), ответ в `b64_json` или `url` |
+| `services/images/prompting.py` | ✅ Сборка промпта по шаблону `image_prompt`: префикс и суффикс стиля + style bible + визуал сцены |
+| `services/images/crop.py` | ✅ Размеры генерации (~1 МП) и выхода (1080p), кадрирование `cover` / `blur` (размытый фон) |
+| `services/images/generator.py` | ✅ Параллельная генерация (`IMAGE_CONCURRENCY`), общий seed проекта, 2 попытки на кадр, ошибка одной сцены не роняет остальные, кэш `storage/cache/images/{sha256}.img` |
 | `services/tts.py` | Edge TTS, word boundaries, SSML-паузы |
 | `services/subtitles.py` | Сборка SRT и ASS (по фразам и по словам) |
 | `services/compositor.py` | Построение и запуск FFmpeg-команд |
