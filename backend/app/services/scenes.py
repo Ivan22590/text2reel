@@ -220,3 +220,38 @@ def split_script(
             return SceneSplitResult(storyboard, usage, attempts=attempts)
 
     raise SceneSplitError(f"scene split failed after {attempts} attempts: {last_error}")
+
+
+def regenerate_visual_prompt(
+    style_bible: StyleBible,
+    narration: str,
+    previous_prompt: str,
+    *,
+    hint: str = "",
+    llm: LLMClient | None = None,
+) -> tuple[str, LLMUsage]:
+    """New visual prompt for one scene (FR-2.5), prompt `scene_regenerate`."""
+    llm = llm or LLMClient()
+    prompt = load_prompt("scene_regenerate")
+    variables = {
+        "style_bible_json": style_bible.model_dump_json(),
+        "narration": narration,
+        "previous_prompt": previous_prompt,
+        "user_hint": hint,
+    }
+    result = llm.complete(
+        [
+            {"role": "system", "content": prompt.render("system")},
+            {"role": "user", "content": prompt.render("user", **variables)},
+        ],
+        max_tokens=400,
+        temperature=float(prompt.meta.get("temperature", 0.7)),
+    )
+    content = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", result.content)
+    try:
+        new_prompt = str(json.loads(content)["visual_prompt"]).strip()
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise SceneSplitError(f"invalid scene_regenerate answer: {exc}") from exc
+    if len(new_prompt) < 10:
+        raise SceneSplitError("scene_regenerate returned an empty prompt")
+    return new_prompt, result.usage

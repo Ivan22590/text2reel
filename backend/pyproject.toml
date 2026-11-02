@@ -40,6 +40,10 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency markers in argument defaults are the intended usage.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Cookie", "fastapi.Query"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["ffmpeg: needs ffmpeg/ffprobe installed (skipped otherwise)"]

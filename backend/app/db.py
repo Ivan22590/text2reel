@@ -2,6 +2,7 @@ from collections.abc import Iterator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.config import get_settings
 
@@ -13,11 +14,14 @@ class Base(DeclarativeBase):
 def _make_engine():
     settings = get_settings()
     url = settings.database_url
-    connect_args = {}
+    kwargs: dict = {}
     if url.startswith("sqlite"):
-        connect_args["check_same_thread"] = False
+        kwargs["connect_args"] = {"check_same_thread": False}
         settings.storage_dir.mkdir(parents=True, exist_ok=True)
-    return create_engine(url, connect_args=connect_args)
+        if ":memory:" in url:
+            # one shared connection, otherwise every thread sees its own empty database
+            kwargs["poolclass"] = StaticPool
+    return create_engine(url, **kwargs)
 
 
 engine = _make_engine()

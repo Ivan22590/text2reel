@@ -39,6 +39,12 @@ class Project(Base):
     status: Mapped[str] = mapped_column(String(16), default=ProjectStatus.draft)
     style_bible: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     seed: Mapped[int] = mapped_column(Integer, default=0)
+    # Progress of the running job, polled by the SSE endpoint.
+    step: Mapped[str] = mapped_column(String(32), default="")
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    message: Mapped[str] = mapped_column(String(300), default="")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cost_rub: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -62,6 +68,7 @@ class Scene(Base):
     visual_prompt: Mapped[str] = mapped_column(Text, default="")
     mood: Mapped[str] = mapped_column(String(16), default="calm")
     camera: Mapped[str] = mapped_column(String(16), default="zoom_in")
+    image_seed: Mapped[int] = mapped_column(Integer, default=0)  # +1 on every regeneration
     image_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     audio_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     duration_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
