@@ -15,6 +15,7 @@
 | Этап 3: озвучка Edge TTS + субтитры SRT/ASS | 🔄 код и тесты готовы, ждёт прогона на VPS |
 | Этап 4: монтаж FFmpeg, команда `render` (сценарий → MP4) | 🔄 e2e-тесты в CI зелёные, ждёт прогона с API |
 | Этап 5a: API для UI (проекты, сцены, SSE-прогресс, демо-логин) | ✅ CI зелёный |
+| Этап 6: музыка (12 треков CC0), шаблоны форматов, брендинг (логотип, шрифты, цвета, интро и аутро) | ✅ CI зелёный, кадры проверены глазами |
 | Этап 5b: веб-интерфейс (проекты, редактор сцен, таймлайн, прогресс, плеер) | 🔄 собирается и проходит lint, ждёт проверки в браузере на VPS |
 | Музыка, шаблоны, брендинг | ⏳ не начат |
 | Деплой и демо | ⏳ не начат |
@@ -28,9 +29,9 @@
 - 🗣 **Озвучка.** Русские и английские голоса, естественные паузы, настройка темпа.
 - 🎬 **Монтаж через FFmpeg.** Ken Burns, переходы `xfade`, прожжённые субтитры и SRT.
   Видео не генерируется покадрово: на каждую сцену создаётся одна картинка, и FFmpeg «оживляет» её плавным зумом и панорамой.
-- 🎵 **Фоновая музыка.** Подбирается по настроению, приглушается под голос.
+- 🎵 **Фоновая музыка.** 12 треков CC0: подбирается по настроению сцен или выбирается вручную, плавно входит и выходит, приглушается под голос.
 - 📐 **Форматы.** 9:16 (Shorts, Reels, TikTok), 16:9 (YouTube), 1:1 (Instagram).
-- 🏷 **Брендинг.** Логотип, цвета, интро и аутро.
+- 🏷 **Брендинг и шаблоны.** Шаблон под каждую площадку (субтитры, переходы, безопасные зоны), свой логотип, шрифт и цвета, карточки интро и аутро.
 - 🖥 **Веб-интерфейс.** Редактор сцен, таймлайн, прогресс рендера в реальном времени.
 
 ## Архитектура
@@ -101,7 +102,9 @@ python -m app.cli tts sb.json --voice ru-RU-SvetlanaNeural --format 9:16 --out-d
 python -m app.cli compose --storyboard sb.json --images out/ --narration out/narration.json --format 9:16  # монтаж
 
 # всё сразу: сценарий → out/video.mp4 + subtitles.srt + report.json (время и ₽ по шагам)
-python -m app.cli render script.txt --style watercolor --format 9:16 --voice ru-RU-SvetlanaNeural [--music track.mp3]
+python -m app.cli render script.txt --style watercolor --format 9:16 --voice ru-RU-SvetlanaNeural \
+    [--music auto|none|<id трека>|файл] [--logo logo.png] [--intro-text "Название"] [--outro-text "Подписывайтесь!"] [--font "PT Sans"]
+python -m app.cli music     # список треков библиотеки
 ```
 
 ### Переменные окружения
@@ -124,13 +127,13 @@ backend/
   app/
     api/            REST- и SSE-эндпоинты
     models/         SQLAlchemy-модели (Project, Scene, RenderJob)
-    services/       llm, scenes, images, tts, subtitles, compositor, music, templates
+    services/       llm, scenes, images, tts, subtitles, compositor, pipeline, music, templates, branding
     workers/        Celery-задачи пайплайна
   prompts/          промпты продукта (.md), подгружаются в рантайме
+  assets/           music/ (CC0, catalog.json, LICENSES.md), fonts/ (OFL)
+  templates/        JSON-шаблоны форматов (9:16, 16:9, 1:1)
   tests/
-frontend/src/       pages, components (Timeline, SceneCard, ...)
-assets/             music/, fonts/, logos/
-templates/          JSON-шаблоны форматов
+frontend/src/       pages, components (SceneCard, TimelineView, BrandingPanel, ...)
 docs/               ТЗ, архитектура, промпты, сравнение, деплой, скриншоты
 examples/           примеры готовых видео
 ```

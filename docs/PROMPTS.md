@@ -138,18 +138,18 @@ negative: text, letters, watermark, logo, signature, caption, blurry, low qualit
 | minimal | Минимализм | flat vector illustration, minimalist, geometric shapes | limited palette, lots of negative space, clean |
 
 ### A5. `music_mood` — правило подбора музыки
-- **Файл:** [`backend/prompts/music_mood.md`](../backend/prompts/music_mood.md)
-- **Тип:** детерминированное правило поверх поля `mood` из A1, без отдельного вызова LLM (экономия)
+- **Файл:** [`backend/prompts/music_mood.md`](../backend/prompts/music_mood.md) (версия 2)
+- **Тип:** детерминированное правило поверх поля `mood` из A1, без отдельного вызова LLM (экономия). Код: `app/services/music.py`
 
-### A6. `smoke_llm` — диагностический запрос
-- **Файл:** [`backend/prompts/smoke_llm.md`](../backend/prompts/smoke_llm.md)
-- **Назначение:** проверка ключа ProxyAPI, base URL и идентификаторов моделей (`python -m app.cli smoke-llm`). Стоимость меньше 0,01 ₽
-- **Модель:** основная и запасная по очереди, `max_tokens=50`, JSON
+1. Настроение ролика = самое частое `mood` сцен с весом по длительности озвучки; при ничьей приоритет epic > tense > happy > calm > corporate > sad > mysterious.
+2. Берутся треки, где это настроение указано первым в `moods`; если таких нет, то где оно указано вторым.
+3. Нет ни одного: запасные настроения (epic → tense, happy; sad → calm; mysterious → tense, calm и т. д.), затем любой трек.
+4. Выбор среди подходящих: `seed проекта % число треков`.
 
-```
-[system] Answer with JSON: {"ok": true, "lang": "<language of the user message>"}
-[user]   Привет! На каком языке это сообщение?
-```
+| Версия | Дата | Изменение |
+|---|---|---|
+| 1 | 2026-11-02 | Первая версия |
+| 2 | 2026-11-02 | Реализовано: предпочтение основного тега, цепочка запасных настроений, выбор по seed |
 
 ---
 
@@ -172,6 +172,7 @@ negative: text, letters, watermark, logo, signature, caption, blurry, low qualit
 | B11 | 2026-11-02 | Этап 3 | «продолжай» | Озвучка Edge TTS с таймингами слов (адаптация из MoneyPrinterTurbo, MIT), субтитры SRT/ASS с karaoke-подсветкой, CLI `tts`, тесты |
 | B12 | 2026-11-02 | Этап 4 | «Продолжай» (план этапа 4 утверждён в plan mode) | Compositor на FFmpeg (Ken Burns, xfade, ASS, loudnorm, ducking), `run_pipeline` и CLI `render`/`compose`, e2e-тесты с ffmpeg в CI |
 | B13 | 2026-11-02 | Этап 5 | «Продолжай» | 5a: API для веб-интерфейса, Celery-задачи, SSE-прогресс, демо-логин; промпт `scene_regenerate` подключён к перегенерации сцены. 5b: React-интерфейс (проекты, редактор сцен, таймлайн, прогресс, плеер) |
+| B14 | 2026-11-02 | Этап 6 | «Продолжай с этапом 6. Треки подбери сам» | Библиотека из 12 треков CC0 с проверкой лицензий через API Wikimedia Commons, шаблоны форматов, брендинг (логотип, шрифты, цвета, интро и аутро), вкладка «Музыка и стиль», проверка рендера по кадрам из CI |
 
 ### Шаблоны промптов для следующих этапов
 Повторно используемые формулировки для работы с ассистентом:

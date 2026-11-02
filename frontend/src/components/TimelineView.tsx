@@ -26,7 +26,10 @@ export default function TimelineView({ timeline, onSceneClick }: { timeline: Tim
 
   return (
     <div style={{ overflowX: 'auto', paddingBottom: 8 }}>
-      <Typography.Text type="secondary">Длительность: {timeline.total.toFixed(1)} с</Typography.Text>
+      <Typography.Text type="secondary">
+        Длительность: {timeline.total.toFixed(1)} с
+        {timeline.music ? ` · музыка: «${timeline.music.title}»` : ' · без музыки'}
+      </Typography.Text>
       <div style={{ marginTop: 8, minWidth: width + 90 }}>
         {track(
           'Время',
@@ -38,48 +41,55 @@ export default function TimelineView({ timeline, onSceneClick }: { timeline: Tim
         )}
         {track(
           'Видео',
-          timeline.scenes.map((s) => (
-            <Tooltip key={s.id} title={`Сцена ${s.index + 1}: ${s.narration}`}>
-              <div
-                onClick={() => onSceneClick?.(s.id)}
-                style={{
-                  position: 'absolute',
-                  left: x(s.start),
-                  width: x(s.clip) - 2,
-                  height: TRACK_HEIGHT,
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  overflow: 'hidden',
-                  background: s.image_url ? `center / cover url(${s.image_url})` : COLORS[s.index % COLORS.length],
-                  border: `2px solid ${COLORS[s.index % COLORS.length]}`,
-                  color: '#fff',
-                  fontSize: 12,
-                  textShadow: '0 0 3px #000',
-                  padding: '2px 4px',
-                }}
-              >
-                {s.index + 1}
-              </div>
-            </Tooltip>
-          )),
+          timeline.scenes.map((s, i) => {
+            const isCard = s.kind !== 'scene'
+            const color = isCard ? '#8c8c8c' : COLORS[(s.index ?? 0) % COLORS.length]
+            const label = isCard ? (s.kind === 'intro' ? 'Интро' : 'Аутро') : String((s.index ?? 0) + 1)
+            return (
+              <Tooltip key={`${s.kind}-${i}`} title={isCard ? `${label}: карточка с названием` : `Сцена ${label}: ${s.narration}`}>
+                <div
+                  onClick={() => s.id !== null && onSceneClick?.(s.id)}
+                  style={{
+                    position: 'absolute',
+                    left: x(s.start),
+                    width: x(s.clip) - 2,
+                    height: TRACK_HEIGHT,
+                    borderRadius: 4,
+                    cursor: isCard ? 'default' : 'pointer',
+                    overflow: 'hidden',
+                    background: s.image_url ? `center / cover url(${s.image_url})` : color,
+                    border: `2px solid ${color}`,
+                    color: '#fff',
+                    fontSize: 12,
+                    textShadow: '0 0 3px #000',
+                    padding: '2px 4px',
+                  }}
+                >
+                  {label}
+                </div>
+              </Tooltip>
+            )
+          }),
         )}
         {track(
           'Озвучка',
-          timeline.scenes.map((s) => (
-            <div
-              key={s.id}
-              style={{
-                position: 'absolute',
-                left: x(s.start),
-                width: x(s.voice),
-                top: 10,
-                height: TRACK_HEIGHT - 20,
-                borderRadius: 4,
-                background: COLORS[s.index % COLORS.length],
-                opacity: 0.6,
-              }}
-            />
-          )),
+          timeline.scenes
+            .filter((s) => s.kind === 'scene')
+            .map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  position: 'absolute',
+                  left: x(s.start),
+                  width: x(s.voice),
+                  top: 10,
+                  height: TRACK_HEIGHT - 20,
+                  borderRadius: 4,
+                  background: COLORS[(s.index ?? 0) % COLORS.length],
+                  opacity: 0.6,
+                }}
+              />
+            )),
         )}
         {track(
           'Субтитры',

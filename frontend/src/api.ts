@@ -18,11 +18,57 @@ export interface Option {
   name: string
 }
 
+export interface MusicTrack {
+  id: string
+  title: string
+  artist: string
+  duration: number
+  moods: string[]
+  url: string
+}
+
+export interface TemplateInfo {
+  id: string
+  name: string
+  format: Format
+  font: string
+  subtitle_mode: 'phrase' | 'karaoke'
+  transition: string
+  transition_duration: number
+  logo_position: LogoPosition
+  intro_seconds: number
+  outro_seconds: number
+}
+
+export type LogoPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+
 export interface Meta {
   styles: Option[]
   formats: Option[]
   voices: Option[]
   cameras: string[]
+  fonts: Option[]
+  logo_positions: LogoPosition[]
+  music: MusicTrack[]
+  templates: TemplateInfo[]
+}
+
+// Per-project brand settings (null = the template default).
+export interface Branding {
+  font: string | null
+  subtitle_color: string | null
+  highlight_color: string | null
+  accent_color: string
+  background_color: string
+  logo_position: LogoPosition | null
+  logo_opacity: number | null
+  intro_text: string
+  outro_text: string
+}
+
+export interface BrandingOut extends Branding {
+  has_logo: boolean
+  logo_url: string | null
 }
 
 export interface Scene {
@@ -58,6 +104,9 @@ export interface Project {
   style: string
   format: Format
   voice: string
+  music: string // 'auto' | 'none' | track id
+  music_track: { id: string; title: string; artist: string } | null
+  branding: BrandingOut
   status: ProjectStatus
   step: string
   progress: number
@@ -82,8 +131,9 @@ export interface Timeline {
   total: number
   transition?: number
   scenes: {
-    id: number
-    index: number
+    kind: 'intro' | 'scene' | 'outro'
+    id: number | null
+    index: number | null
     start: number
     clip: number
     voice: number
@@ -91,6 +141,7 @@ export interface Timeline {
     narration: string
   }[]
   cues: { start: number; end: number; text: string }[]
+  music: { id: string; title: string; artist: string } | null
 }
 
 export class ApiError extends Error {
@@ -140,8 +191,18 @@ export const api = {
   project: (id: number) => request<Project>('GET', `/projects/${id}`),
   createProject: (data: { title?: string; script: string; style: string; format: Format; voice: string }) =>
     request<Project>('POST', '/projects', data),
-  updateProject: (id: number, data: Partial<Pick<Project, 'title' | 'script' | 'style' | 'format' | 'voice'>>) =>
-    request<Project>('PATCH', `/projects/${id}`, data),
+  updateProject: (
+    id: number,
+    data: Partial<Pick<Project, 'title' | 'script' | 'style' | 'format' | 'voice' | 'music'>> & {
+      branding?: Branding
+    },
+  ) => request<Project>('PATCH', `/projects/${id}`, data),
+  uploadLogo: (id: number, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<Project>('POST', `/projects/${id}/logo`, form)
+  },
+  deleteLogo: (id: number) => request<Project>('DELETE', `/projects/${id}/logo`),
   deleteProject: (id: number) => request<void>('DELETE', `/projects/${id}`),
   analyze: (id: number) => request<Project>('POST', `/projects/${id}/analyze`),
   generate: (id: number) => request<Project>('POST', `/projects/${id}/generate`),

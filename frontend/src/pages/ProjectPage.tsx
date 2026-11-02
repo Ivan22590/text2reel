@@ -4,6 +4,7 @@ import { Alert, Button, Card, Progress, Select, Space, Spin, Steps, Tabs, Typogr
 import { api, type Meta, type Timeline } from '../api'
 import { useProject } from '../hooks/useProject'
 import RenderPanel from '../components/RenderPanel'
+import BrandingPanel from '../components/BrandingPanel'
 import SceneCard from '../components/SceneCard'
 import StatusTag from '../components/StatusTag'
 import TimelineView from '../components/TimelineView'
@@ -22,9 +23,10 @@ export default function ProjectPage() {
   }, [])
 
   const assetsKey = project?.scenes.map((s) => `${s.image_url}|${s.audio_url}`).join()
+  const lookKey = project ? JSON.stringify([project.music, project.branding, project.format]) : ''
   useEffect(() => {
     if (project?.scenes.length) api.timeline(id).then(setTimeline).catch(() => setTimeline(null))
-  }, [id, project?.scenes.length, assetsKey])
+  }, [id, project?.scenes.length, assetsKey, lookKey])
 
   useEffect(() => {
     if (project?.status === 'done') setTab('video')
@@ -164,6 +166,13 @@ export default function ProjectPage() {
               />
             ) : (
               <Spin />
+            ),
+          },
+          {
+            key: 'style',
+            label: 'Музыка и стиль',
+            children: (
+              <BrandingPanel project={project} meta={meta} disabled={running} onSaved={() => void reload()} onError={setError} />
             ),
           },
           { key: 'video', label: 'Видео', children: <RenderPanel project={project} /> },

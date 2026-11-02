@@ -14,5 +14,9 @@ This project includes code adapted from third-party open-source projects:
    - backend/app/services/subtitles.py — millisecond-rounded timestamp formatting
      (from app/services/voice.py: mktimestamp)
 
-Third-party assets (music, fonts) are listed with their licenses in
-assets/music/LICENSES.md and assets/fonts/LICENSES.md.
+2. Background music: 12 tracks under CC0 1.0 (John Bartmann, Tomaso Albinoni / J. S. Bach
+   recordings by Musopen, Manwithmetalpig, Maddy), taken from Wikimedia Commons.
+   Per-track sources: backend/assets/music/LICENSES.md
+
+3. Fonts: PT Sans, Fira Sans, Lobster, Russo One under the SIL Open Font License 1.1
+   (github.com/google/fonts). License texts: backend/assets/fonts/OFL-*.txt

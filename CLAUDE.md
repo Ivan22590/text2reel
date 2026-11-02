@@ -10,6 +10,7 @@ Text2Reel — учебный проект Zerocoder: платформа «тек
 - Код story-flicks НЕ копировать: у него нет лицензии.
 - LLM только через ProxyAPI (`services/llm/client.py`, OpenAI-совместимый SDK, `PROXYAPI_BASE_URL`, `PROXYAPI_KEY`). Основная модель Claude Haiku 5.5, запасная DeepSeek V4.1 Flash. Preview-модели не использовать.
 - Картинки: адаптер с `IMAGE_PROVIDER` (`fal` | `proxyapi`). TTS: Edge TTS.
+- Музыка и шрифты лежат в `backend/assets`, шаблоны форматов в `backend/templates` (чтобы попадать в Docker-образ). Новый трек добавлять только после проверки лицензии (CC0 с подтверждением на источнике), с записью в `catalog.json` и `LICENSES.md`. Треки Komiku не используем: на Commons у них не подтверждена лицензия.
 - Бюджет API ≈ $5–20. Не делать лишних платных вызовов в тестах (мокать клиентов).
 
 ## Окружение
@@ -47,6 +48,8 @@ python -m app.cli tts sb.json --voice ru-RU-DmitryNeural --format 9:16 --out-dir
 python -m app.cli compose --storyboard sb.json --images out/ --narration out/narration.json  # монтаж без API
 python -m app.cli render script.txt --style anime --format 9:16 --out-dir out/  # пайплайн целиком (этап 4)
 pytest -m ffmpeg   # e2e с настоящим ffmpeg (в CI ставится apt-ом)
+python -m app.cli music    # библиотека музыки
+python -m tests.sample_frames out/   # кадры из реального рендера (нужен ffmpeg); в CI это артефакт `sample-frames`: после правки шаблонов, шрифтов или брендинга скачать (`gh run download -n sample-frames`) и посмотреть
 # без pip локально ruff можно скачать: gh release download -R astral-sh/ruff -p "ruff-x86_64-unknown-linux-gnu.tar.gz"
 ```
 
