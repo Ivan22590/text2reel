@@ -85,7 +85,7 @@ IMAGE_PROVIDER=proxyapi PROXYAPI_IMAGE_MODEL=<id> python -m app.cli images sb.js
 
 | Вариант | Цена | Решение |
 |---|---|---|
-| **Edge TTS** (`edge-tts`) | Бесплатно | ✅ Основной. Голоса RU: `ru-RU-SvetlanaNeural`, `ru-RU-DmitryNeural`. EN: `en-US-AriaNeural`, `en-US-GuyNeural`. Отдаёт word boundaries |
+| **Edge TTS** (`edge-tts` 7.x) | Бесплатно | ✅ Основной. Голоса RU: `ru-RU-SvetlanaNeural`, `ru-RU-DmitryNeural`. EN: `en-US-AriaNeural`, `en-US-GuyNeural`, `en-US-JennyNeural`. Отдаёт word boundaries. Собственный SSML не принимает: паузы между сценами добавляются при монтаже |
 | OpenAI TTS через ProxyAPI | Платно | Запасной, если Edge TTS станет недоступен |
 | ElevenLabs | Дорого | Вне MVP |
 

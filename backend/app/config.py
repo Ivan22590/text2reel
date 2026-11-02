@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     tts_voice: str = "ru-RU-SvetlanaNeural"
     tts_rate: str = "+0%"
     tts_pitch: str = "+0Hz"
+    tts_scene_pause_sec: float = 0.4  # silence between scenes (FR-3.3)
+    tts_concurrency: int = 4
 
     redis_url: str = "redis://redis:6379/0"
     database_url: str = "sqlite:///./storage/app.db"

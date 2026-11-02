@@ -12,7 +12,8 @@
 | Каркас (FastAPI, модели, Celery, React, Docker Compose, CI) | 🔄 CI зелёный, ждёт проверки на VPS |
 | Этап 1: разбивка сценария на сцены (LLM через ProxyAPI) | 🔄 код и тесты готовы, ждёт прогона с ключом |
 | Этап 2: генерация картинок (Fal.ai / ProxyAPI) | 🔄 код и тесты готовы, ждёт прогона с ключом |
-| Этапы 3–4: TTS → FFmpeg | ⏳ не начаты |
+| Этап 3: озвучка Edge TTS + субтитры SRT/ASS | 🔄 код и тесты готовы, ждёт прогона на VPS |
+| Этап 4: монтаж FFmpeg | ⏳ не начат |
 | Frontend | ⏳ не начат |
 | Музыка, шаблоны, брендинг | ⏳ не начат |
 | Деплой и демо | ⏳ не начат |
@@ -95,6 +96,7 @@ cd backend && source .venv/bin/activate
 python -m app.cli smoke-llm                                   # проверить ключ ProxyAPI и модели
 python -m app.cli scenes script.txt --style watercolor --format 9:16 --out sb.json   # разбить сценарий на сцены
 python -m app.cli images sb.json --style watercolor --format 9:16 --out-dir out/       # картинка на каждую сцену
+python -m app.cli tts sb.json --voice ru-RU-SvetlanaNeural --format 9:16 --out-dir out/  # озвучка + субтитры
 ```
 
 ### Переменные окружения

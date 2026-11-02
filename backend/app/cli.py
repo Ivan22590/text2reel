@@ -4,9 +4,11 @@ python -m app.cli llm-models [--filter haiku]    # list model ids available in P
 python -m app.cli smoke-llm                      # one cheap request to primary + fallback
 python -m app.cli scenes script.txt --style anime --format 9:16 --out storyboard.json
 python -m app.cli images storyboard.json --style anime --format 9:16 --out-dir out/
+python -m app.cli tts storyboard.json --voice ru-RU-SvetlanaNeural --format 9:16 --out-dir out/
 """
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -14,11 +16,14 @@ from pathlib import Path
 from app.config import get_settings
 from app.prompts.loader import load_prompt
 from app.services.images import get_provider
+from app.services.images.crop import OUTPUT_SIZES
 from app.services.images.generator import generate_images
 from app.services.images.prompting import build_prompts
 from app.services.llm.client import LLMClient, LLMError
 from app.services.scenes import FORMATS, Storyboard, split_script
 from app.services.styles import get_style, load_style_presets
+from app.services.subtitles import STYLE_DEFAULTS, build_cues, place_on_timeline, to_ass, to_srt
+from app.services.tts import VOICES, synthesize_scenes
 
 
 def cmd_llm_models(args: argparse.Namespace) -> int:
@@ -104,6 +109,56 @@ def cmd_images(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_tts(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    storyboard = Storyboard.model_validate_json(Path(args.storyboard).read_text(encoding="utf-8"))
+    out_dir = Path(args.out_dir)
+    texts = [scene.narration for scene in storyboard.scenes]
+    started = time.monotonic()
+    results = synthesize_scenes(
+        texts,
+        voice=args.voice,
+        rate=args.rate or settings.tts_rate,
+        pitch=args.pitch or settings.tts_pitch,
+        out_dir=out_dir,
+        cache_dir=None if args.no_cache else settings.storage_dir / "cache" / "tts",
+        concurrency=settings.tts_concurrency,
+    )
+    for item in results:
+        status = f"OK {item.path} {item.duration:.2f}s" if item.ok else item.error
+        print(f"scene {item.index:02d}: {status}")
+    if any(not item.ok for item in results):
+        return 1
+
+    # Preview timeline: scenes back to back with a pause; the compositor (stage 4)
+    # computes the final offsets including transitions.
+    offset, placed = 0.0, []
+    for item, text in zip(results, texts, strict=True):
+        placed.append((offset, item.words, text))
+        offset += item.duration + settings.tts_scene_pause_sec
+    style = STYLE_DEFAULTS[args.format]
+    cues = build_cues(place_on_timeline(placed), max_chars=style.max_chars)
+    (out_dir / "subtitles.srt").write_text(to_srt(cues), encoding="utf-8")
+    (out_dir / "subtitles.ass").write_text(
+        to_ass(cues, *OUTPUT_SIZES[args.format], style), encoding="utf-8"
+    )
+    manifest = [
+        {
+            "index": r.index,
+            "path": str(r.path),
+            "duration": r.duration,
+            "words": [w.__dict__ for w in r.words],
+        }
+        for r in results
+    ]
+    (out_dir / "narration.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    print(
+        f"narration: {offset:.1f}s total | cues: {len(cues)} | {time.monotonic() - started:.1f}s",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -133,6 +188,16 @@ def build_parser() -> argparse.ArgumentParser:
     images.add_argument("--fit", choices=("cover", "blur"), default=None)
     images.add_argument("--no-cache", action="store_true")
     images.set_defaults(func=cmd_images)
+
+    tts = sub.add_parser("tts", help="narrate every scene and build SRT/ASS subtitles")
+    tts.add_argument("storyboard", help="JSON produced by `scenes --out`")
+    tts.add_argument("--voice", default=get_settings().tts_voice, choices=sorted(VOICES))
+    tts.add_argument("--rate", default=None, help="e.g. +10%% or -5%%")
+    tts.add_argument("--pitch", default=None, help="e.g. +2Hz")
+    tts.add_argument("--format", default="9:16", choices=FORMATS)
+    tts.add_argument("--out-dir", default="out")
+    tts.add_argument("--no-cache", action="store_true")
+    tts.set_defaults(func=cmd_tts)
     return parser
 
 

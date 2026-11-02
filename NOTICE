@@ -8,7 +8,11 @@ This project includes code adapted from third-party open-source projects:
    License: MIT
    Used for: Edge TTS integration with word boundaries, subtitle generation,
    audio mixing recipes. Adapted files carry a header pointing to the source.
-   (List of adapted files will be maintained here.)
+   Adapted files:
+   - backend/app/services/tts.py — edge-tts 7 streaming with WordBoundary events,
+     temp file + atomic replace, retries (from app/services/voice.py: azure_tts_v1)
+   - backend/app/services/subtitles.py — millisecond-rounded timestamp formatting
+     (from app/services/voice.py: mktimestamp)
 
 Third-party assets (music, fonts) are listed with their licenses in
 assets/music/LICENSES.md and assets/fonts/LICENSES.md.

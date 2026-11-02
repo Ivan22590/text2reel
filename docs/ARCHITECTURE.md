@@ -92,15 +92,15 @@ RenderJob
 | `services/llm/pricing.py` | ✅ Цены моделей ProxyAPI (₽ за 1M токенов) для расчёта `cost_rub` |
 | `services/scenes.py` | ✅ `split_script()`: проверка ввода (≤ 5 000 символов, стиль, формат), автоопределение языка, целевое число сцен (≈ 6 с на сцену), Pydantic-схема `Storyboard`, проверка совпадения текста со сценарием (≥ 0,97), повторы с retry-промптом, кэш `storage/cache/llm/{sha256}.json` |
 | `services/styles.py` | ✅ Пресеты стилей из `prompts/style_presets.md` |
-| `app/cli.py` | ✅ `llm-models`, `smoke-llm`, `scenes` (этап 1), `images` (этап 2) |
+| `app/cli.py` | ✅ `llm-models`, `smoke-llm`, `scenes` (этап 1), `images` (этап 2), `tts` (этап 3) |
 | `services/images/base.py` | ✅ Интерфейс провайдера: `ImageRequest` (prompt, negative, размер, seed) → `ImageResult` (байты, ₽) |
 | `services/images/fal.py` | ✅ Fal.ai: `POST https://fal.run/<FAL_MODEL>`, `Authorization: Key …`, скачивание по URL. У FLUX schnell нет negative prompt |
 | `services/images/proxyapi.py` | ✅ ProxyAPI Images API (OpenAI SDK), ответ в `b64_json` или `url` |
 | `services/images/prompting.py` | ✅ Сборка промпта по шаблону `image_prompt`: префикс и суффикс стиля + style bible + визуал сцены |
 | `services/images/crop.py` | ✅ Размеры генерации (~1 МП) и выхода (1080p), кадрирование `cover` / `blur` (размытый фон) |
 | `services/images/generator.py` | ✅ Параллельная генерация (`IMAGE_CONCURRENCY`), общий seed проекта, 2 попытки на кадр, ошибка одной сцены не роняет остальные, кэш `storage/cache/images/{sha256}.img` |
-| `services/tts.py` | Edge TTS, word boundaries, SSML-паузы |
-| `services/subtitles.py` | Сборка SRT и ASS (по фразам и по словам) |
+| `services/tts.py` | ✅ Edge TTS (edge-tts 7, `boundary="WordBoundary"`): MP3 на сцену + тайминги слов, нормализация текста (финальная пунктуация для интонации), 3 попытки, кэш `storage/cache/tts/{sha256}.mp3/.json`, длительность через ffprobe (запасной вариант — расчёт по битрейту 48 кбит/с). Адаптировано из MoneyPrinterTurbo (MIT) |
+| `services/subtitles.py` | ✅ Пунктуация из исходного текста → фразы (лимит символов по формату, ≤ 3,5 с, разрыв на конце предложения и паузе > 0,6 с) → SRT и ASS. Режимы `phrase` и `karaoke` (`\kf`, подсветка текущего слова) |
 | `services/compositor.py` | Построение и запуск FFmpeg-команд |
 | `services/music.py` | Каталог треков, подбор по `mood` |
 | `services/templates.py` | Загрузка JSON-шаблонов форматов |
@@ -132,6 +132,9 @@ ffmpeg -i video.mp4 -i voice.m4a -i music.mp3 -i logo.png -filter_complex \
   [vs][lg]overlay=W-w-40:40[v]" \
  -map "[v]" -map "[a]" -c:v libx264 -preset veryfast -crf 21 -c:a aac -b:a 160k -movflags +faststart out.mp4
 ```
+
+### Паузы и тайминг (этап 3)
+Edge TTS больше не принимает собственный SSML, поэтому тег `<break>` недоступен. Паузы внутри сцены дают знаки препинания. Паузу между сценами (`TTS_SCENE_PAUSE_SEC`, 0,4 с) compositor добавляет тишиной (`apad`). Длительность клипа сцены = длительность озвучки + пауза. Субтитры строятся по абсолютным таймингам: `place_on_timeline()` сдвигает слова каждой сцены на её старт в итоговом видео.
 
 ## 7. Шаблоны форматов (`templates/*.json`)
 
