@@ -19,7 +19,7 @@ step "login"
 "${CURL[@]}" -c "$JAR" -H 'Content-Type: application/json' \
   -d "{\"username\":\"$USER_NAME\",\"password\":\"$PASSWORD\"}" "$API/api/auth/login" >/dev/null
 [ "$("${CURL[@]}" -b "$JAR" "$API/api/auth/me" | jq -r .username)" = "$USER_NAME" ] || fail "me"
-[ "$("${CURL[@]}" -o /dev/null -w '%{http_code}' -s "$API/api/projects" || true)" = "401" ] || fail "anonymous access is not rejected"
+[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@" "$API/api/projects")" = "401" ] || fail "anonymous access is not rejected"
 
 step "reference data and music"
 META=$("${CURL[@]}" -b "$JAR" "$API/api/meta")
