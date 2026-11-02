@@ -53,8 +53,8 @@ def new_project(client, **extra) -> dict:
     return resp.json()
 
 
-def analyzed(client) -> dict:
-    project = new_project(client)
+def analyzed(client, **extra) -> dict:
+    project = new_project(client, **extra)
     assert client.post(f"/api/projects/{project['id']}/analyze").status_code == 202
     return client.get(f"/api/projects/{project['id']}").json()
 
@@ -100,7 +100,7 @@ def test_analyze_creates_scenes(client):
 
 def test_analyze_failure_is_reported(client, fakes):
     fakes.llm_answers = ["not json"] * 3
-    project = analyzed(client)
+    project = analyzed(client, style="comic")  # other style: no cached storyboard
     assert project["status"] == "draft"
     assert "Не удалось разбить сценарий" in project["error"]
 
