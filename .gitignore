@@ -30,3 +30,4 @@ examples/*.mp4
 .vscode/
 *.tsbuildinfo
 backend/sample-frames/
+backend/benchmark*

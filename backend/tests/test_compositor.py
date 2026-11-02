@@ -263,9 +263,8 @@ def test_draft_profile_is_much_cheaper_than_final():
         final["preset"] == settings.ffmpeg_preset and final["clip_crf"] == settings.ffmpeg_clip_crf
     )
     assert draft["preset"] == draft["clip_preset"] == "ultrafast"
-    assert (
-        draft["fps"] == 24 and draft["crf"] > final["crf"] and draft["upscale"] < final["upscale"]
-    )
+    assert draft["fps"] == min(settings.render_fps, 24)  # never more than the final fps
+    assert draft["crf"] > final["crf"] and draft["upscale"] < final["upscale"]
 
 
 def test_draft_sizes_keep_the_aspect_ratio_and_are_even():
