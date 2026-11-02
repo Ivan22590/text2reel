@@ -21,10 +21,12 @@
 |---|---|
 | **Frontend** | Создание проекта, редактор сцен, таймлайн, прогресс, плеер |
 | **API** | CRUD проектов и сцен, запуск задач, SSE-стрим прогресса, раздача файлов, простая авторизация |
-| **Redis** | Брокер Celery и pub/sub событий прогресса |
+| **Redis** | Брокер Celery (прогресс идёт не через него, а через строку проекта в БД) |
 | **Worker `ai`** | Сетевые и I/O-задачи: LLM, генерация картинок, TTS. Concurrency около 4 |
 | **Worker `render`** | CPU-задачи FFmpeg. Concurrency = 1–2 (по числу ядер / 2) |
-| **DB** | Проекты, сцены, задачи рендера, стоимость |
+| **Celery beat** | Расписание: ежедневная очистка (`ai.cleanup`) |
+| **migrate** | Разовый запуск `alembic upgrade head` в prod |
+| **DB** | Проекты, сцены, задачи рендера, стоимость, тайминги шагов. Схема создаётся миграциями Alembic (`backend/migrations`) |
 | **storage/** | Файлы проекта: `storage/projects/{id}/...`, кэш `storage/cache/{hash}` |
 
 ## 2. Пайплайн
@@ -57,6 +59,7 @@ Project
   status (draft|analyzing|scenes_ready|generating|assets_ready|rendering|done|failed),
   style_bible, seed,
   step, progress, message, error, cost_rub      ← состояние текущей задачи (читает SSE)
+  timings_json                                  ← секунды по шагам {scenes, images, render} для отчёта по KPI
   created_at, updated_at
 
 Scene
@@ -65,7 +68,7 @@ Scene
   image_seed                                    ← +1 при перегенерации: seed кадра = project.seed + image_seed
 
 RenderJob
-  id, project_id, format, status (queued|running|done|failed), progress, step,
+  id, project_id, format, draft (черновик 480p), status (queued|running|done|failed), progress, step,
   output_path, srt_path, started_at, finished_at, error,
   tokens_in, tokens_out, images_count, cost_rub
 ```
@@ -90,7 +93,7 @@ RenderJob
 | PATCH | `/api/scenes/{id}` | Изменить текст, визуальный промпт или камеру сцены |
 | POST | `/api/scenes/{id}/regenerate` | `{target: image|audio|all, hint}`: новый seed; если задан `hint`, сначала LLM пишет новый промпт (`scene_regenerate`) |
 | GET | `/api/projects/{id}/timeline` | Дорожки для превью: интро, сцены, аутро (`kind`), старты и длины клипов, озвучка, фразы субтитров, выбранный трек. Совпадает с тем, что соберёт compositor |
-| POST | `/api/projects/{id}/render` | Задача `render.render` → `RenderJob` (409, если у сцен нет ассетов) |
+| POST | `/api/projects/{id}/render` | `{draft: bool}`: задача `render.render` → `RenderJob`; `draft: true` собирает 480p за секунды (409, если у сцен нет ассетов) |
 | GET | `/api/projects/{id}/events` | SSE: `{status, step, progress, message, error}` при каждом изменении; поток закрывается, когда задача завершена |
 | GET | `/api/files/{path}` | Картинки, аудио, MP4, SRT из `storage/` (Range-запросы для перемотки видео) |
 | POST / DELETE | `/api/projects/{id}/logo` | Загрузка логотипа (PNG/JPG/WebP ≤ 2 МБ, хранится как PNG с альфой ≤ 800 px) и удаление |
@@ -120,6 +123,8 @@ RenderJob
 | `services/branding.py` | ✅ `Branding` (валидация), 4 шрифта OFL с кириллицей (`FONTS`), сохранение логотипа, рисование карточек интро и аутро (Pillow) |
 | `services/cards.py` | ✅ Карточки как сцены без озвучки (`pause = 0`) |
 | `services/compositor.py` | ✅ Таймлайн, построители FFmpeg-команд (чистые функции, на них golden-тесты), `run_ffmpeg`, `render_video()` |
+| `services/cleanup.py` | ✅ `cleanup_expired()`: удаляет проекты и файлы старше `STORAGE_TTL_DAYS` (0 = выключено), старый кэш; возвращает в рабочее состояние задачи, которые зависли больше 2 часов (упал воркер). Запускает Celery beat в 03:15 UTC или `python -m app.cli cleanup` |
+| `services/stats.py` | ✅ `compute_stats()`: K1 (сумма шагов), K2 (стоимость), K3 (доля успешных рендеров) по БД; `python -m app.cli stats [--json]` |
 | `services/pipeline.py` | ✅ `run_pipeline()`: сценарий → MP4, прогресс, `report.json` (для CLI) |
 | `services/project_jobs.py` | ✅ Те же шаги над БД для веб-интерфейса: `analyze_project`, `generate_assets` (только недостающее), `regenerate_scene`, `render_project`, `build_timeline` |
 | `services/providers.py` | ✅ Фабрики LLM / картинок / TTS для задач; в тестах подменяются через `overrides` |
@@ -156,6 +161,8 @@ ffmpeg -i v0.mp3 -i v1.mp3 [-stream_loop -1 -i music.mp3] -filter_complex \
   [music][vkey]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400[ducked];
   [vmix][ducked]amix=inputs=2:normalize=0:duration=first[mix]" -map "[mix]" -c:a aac -b:a 160k work/audio.m4a
 ```
+
+**Профили кодирования** (`encode_options()` в `compositor.py`, настройки `FFMPEG_*`): финальный (клипы `ultrafast` crf 18, итог `veryfast` crf 21, `upscale` 2,0) и **черновой 480p** (всё `ultrafast`, crf 28 и 30, 24 fps, `upscale` 1,25, размеры 480×854, 854×480, 480×480). Значения выбраны по бенчмарку ([METRICS.md](METRICS.md)).
 
 **3. Финальная сборка за одно кодирование:** переходы, прожиг субтитров, mux. ffmpeg запускается с `cwd=out_dir`, поэтому путь к `.ass` относительный и не требует экранирования:
 ```bash

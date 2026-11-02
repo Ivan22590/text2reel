@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Alert, Button, Card, Progress, Select, Space, Spin, Steps, Tabs, Typography } from 'antd'
+import { Alert, Button, Card, Progress, Select, Space, Spin, Steps, Tabs, Tooltip, Typography } from 'antd'
 import { api, type Meta, type Timeline } from '../api'
 import { useProject } from '../hooks/useProject'
 import RenderPanel from '../components/RenderPanel'
@@ -113,6 +113,11 @@ export default function ProjectPage() {
           >
             Собрать видео
           </Button>
+          <Tooltip title="Быстрая сборка в 480p, примерно в 5 раз быстрее: чтобы проверить монтаж, музыку и субтитры">
+            <Button disabled={running || !allAssets} onClick={() => void run(() => api.render(id, true))}>
+              Быстрый предпросмотр
+            </Button>
+          </Tooltip>
         </Space>
         {running && progress && (
           <div style={{ marginTop: 16 }}>

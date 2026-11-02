@@ -11,6 +11,11 @@ export default function RenderPanel({ project }: { project: Project }) {
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       {latest ? (
         <div style={{ maxWidth: w > h ? 820 : 360 }}>
+          {latest.draft && (
+            <Tag color="orange" style={{ marginBottom: 8 }}>
+              черновик 480p: для финального видео нажмите «Собрать видео»
+            </Tag>
+          )}
           <video
             key={latest.video_url}
             src={latest.video_url ?? undefined}
@@ -19,7 +24,7 @@ export default function RenderPanel({ project }: { project: Project }) {
           />
           <Space style={{ marginTop: 8 }}>
             <Button type="primary" href={latest.video_url ?? undefined} download={`text2reel-${project.id}.mp4`}>
-              Скачать MP4
+              {latest.draft ? 'Скачать черновик MP4' : 'Скачать MP4'}
             </Button>
             {latest.srt_url && (
               <Button href={latest.srt_url} download={`text2reel-${project.id}.srt`}>
@@ -41,6 +46,7 @@ export default function RenderPanel({ project }: { project: Project }) {
               <Space wrap>
                 <span>#{r.id}</span>
                 <Tag>{r.format}</Tag>
+                {r.draft && <Tag color="orange">480p</Tag>}
                 <Tag color={r.status === 'done' ? 'green' : r.status === 'failed' ? 'red' : 'blue'}>{r.status}</Tag>
                 {r.started_at && r.finished_at && (
                   <span>

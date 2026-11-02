@@ -15,6 +15,7 @@
 | Этап 3: озвучка Edge TTS + субтитры SRT/ASS | 🔄 код и тесты готовы, ждёт прогона на VPS |
 | Этап 4: монтаж FFmpeg, команда `render` (сценарий → MP4) | 🔄 e2e-тесты в CI зелёные, ждёт прогона с API |
 | Этап 5a: API для UI (проекты, сцены, SSE-прогресс, демо-логин) | ✅ CI зелёный |
+| Этап 7: миграции Alembic, черновой рендер 480p, очистка по TTL, отчёт по KPI, ускорение рендера на 20 %, проверка dev и prod стеков в CI | ✅ готово, кроме развёртывания на VPS |
 | Этап 6: музыка (12 треков CC0), шаблоны форматов, брендинг (логотип, шрифты, цвета, интро и аутро) | ✅ CI зелёный, кадры проверены глазами |
 | Этап 5b: веб-интерфейс (проекты, редактор сцен, таймлайн, прогресс, плеер) | 🔄 собирается и проходит lint, ждёт проверки в браузере на VPS |
 | Музыка, шаблоны, брендинг | ⏳ не начат |
@@ -76,7 +77,7 @@ docker compose up --build
 - Интерфейс: http://localhost:5173
 - API и Swagger: http://localhost:8000/docs, проверка: http://localhost:8000/api/health
 
-Prod: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build` (см. [docs/DEPLOY.md](docs/DEPLOY.md))
+Prod (PostgreSQL, Caddy с HTTPS, миграции): `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build` (см. [docs/DEPLOY.md](docs/DEPLOY.md)). Оба варианта стека проверяются в CI при каждом push.
 
 ### Разработка (на VPS, см. [docs/DEPLOY.md §0](docs/DEPLOY.md))
 Python-зависимости ставятся только в виртуальное окружение `backend/.venv`.
@@ -105,6 +106,8 @@ python -m app.cli compose --storyboard sb.json --images out/ --narration out/nar
 python -m app.cli render script.txt --style watercolor --format 9:16 --voice ru-RU-SvetlanaNeural \
     [--music auto|none|<id трека>|файл] [--logo logo.png] [--intro-text "Название"] [--outro-text "Подписывайтесь!"] [--font "PT Sans"]
 python -m app.cli music     # список треков библиотеки
+python -m app.cli cleanup   # удалить просроченные проекты и кэш
+python -m app.cli stats     # время, стоимость и доля успешных рендеров из БД
 ```
 
 ### Переменные окружения
@@ -129,10 +132,12 @@ backend/
     models/         SQLAlchemy-модели (Project, Scene, RenderJob)
     services/       llm, scenes, images, tts, subtitles, compositor, pipeline, music, templates, branding
     workers/        Celery-задачи пайплайна
+  migrations/       миграции Alembic (схема БД)
   prompts/          промпты продукта (.md), подгружаются в рантайме
   assets/           music/ (CC0, catalog.json, LICENSES.md), fonts/ (OFL)
   templates/        JSON-шаблоны форматов (9:16, 16:9, 1:1)
   tests/
+scripts/            smoke_stack.sh: проверка запущенного стека
 frontend/src/       pages, components (SceneCard, TimelineView, BrandingPanel, ...)
 docs/               ТЗ, архитектура, промпты, сравнение, деплой, скриншоты
 examples/           примеры готовых видео

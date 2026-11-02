@@ -49,8 +49,11 @@ class Settings(BaseSettings):
     render_concurrency: int = 2
     ffmpeg_preset: str = "veryfast"  # final encode (xfade + subtitles + mux)
     ffmpeg_crf: int = 21
-    ffmpeg_clip_preset: str = "veryfast"  # per-scene Ken Burns clips (re-encoded in the final pass)
-    ffmpeg_clip_crf: int = 20
+    # Per-scene Ken Burns clips are re-encoded in the final pass, so a fast preset with a low
+    # crf costs almost no quality (SSIM 0.986) and saves ~20% of the render time
+    # (docs/METRICS.md, benchmark workflow).
+    ffmpeg_clip_preset: str = "ultrafast"
+    ffmpeg_clip_crf: int = 18
     ffmpeg_upscale: float = 2.0  # zoompan works on frames upscaled by this factor
     render_fps: int = 30
 

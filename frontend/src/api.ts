@@ -88,6 +88,7 @@ export interface Scene {
 export interface RenderJob {
   id: number
   format: Format
+  draft: boolean
   status: string
   error: string | null
   video_url: string | null
@@ -206,7 +207,7 @@ export const api = {
   deleteProject: (id: number) => request<void>('DELETE', `/projects/${id}`),
   analyze: (id: number) => request<Project>('POST', `/projects/${id}/analyze`),
   generate: (id: number) => request<Project>('POST', `/projects/${id}/generate`),
-  render: (id: number) => request<RenderJob>('POST', `/projects/${id}/render`, {}),
+  render: (id: number, draft = false) => request<RenderJob>('POST', `/projects/${id}/render`, { draft }),
   timeline: (id: number) => request<Timeline>('GET', `/projects/${id}/timeline`),
   updateScene: (id: number, data: Partial<Pick<Scene, 'narration' | 'visual_prompt' | 'camera'>>) =>
     request<Scene>('PATCH', `/scenes/${id}`, data),

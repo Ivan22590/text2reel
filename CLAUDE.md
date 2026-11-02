@@ -49,6 +49,10 @@ python -m app.cli compose --storyboard sb.json --images out/ --narration out/nar
 python -m app.cli render script.txt --style anime --format 9:16 --out-dir out/  # пайплайн целиком (этап 4)
 pytest -m ffmpeg   # e2e с настоящим ffmpeg (в CI ставится apt-ом)
 python -m app.cli music    # библиотека музыки
+python -m app.cli cleanup | stats   # очистка по TTL | KPI из БД
+alembic revision --autogenerate -m "..."   # после правки app/models (тест test_migrations это проверяет)
+scripts/smoke_stack.sh API WEB USER PASSWORD [-k]   # проверка запущенного docker compose (то же делает CI)
+# бенчмарк рендера: Actions -> Render benchmark -> Run workflow
 python -m tests.sample_frames out/   # кадры из реального рендера (нужен ffmpeg); в CI это артефакт `sample-frames`: после правки шаблонов, шрифтов или брендинга скачать (`gh run download -n sample-frames`) и посмотреть
 # без pip локально ruff можно скачать: gh release download -R astral-sh/ruff -p "ruff-x86_64-unknown-linux-gnu.tar.gz"
 ```
@@ -57,5 +61,7 @@ python -m tests.sample_frames out/   # кадры из реального рен
 - Документация и UI на русском, код, идентификаторы и коммиты на английском.
 - Промпты продукта хранятся только в `backend/prompts/*.md`, без хардкода в коде.
 - Шаги пайплайна идемпотентны и кэшируются по hash входа.
+- В `.env` и `.env.example` комментарии только на отдельных строках (compose и python-dotenv читают комментарий в конце строки по-разному).
+- Схема БД меняется только миграциями Alembic (`backend/migrations`), не `create_all`.
 - Секреты только в `.env`. `.env`, `storage/`, большие медиа в git не коммитить.
 - Коммиты и push только по просьбе пользователя.
