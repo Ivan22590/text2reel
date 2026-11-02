@@ -1,0 +1,180 @@
+[
+  {
+    "id": "calm-blue-whale",
+    "title": "Blue Whale",
+    "artist": "John Bartmann",
+    "file": "calm-blue-whale.ogg",
+    "duration": 244.0,
+    "moods": [
+      "calm"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:John_Bartmann_-_blue-whale-master.ogg",
+    "size": 2984672,
+    "sha256": "c941d38d3ee09ca9a78b2676de986cb92ecffe83d4285d0917237f909be95908"
+  },
+  {
+    "id": "calm-bowed-voices",
+    "title": "Bowed Voices",
+    "artist": "John Bartmann",
+    "file": "calm-bowed-voices.ogg",
+    "duration": 244.0,
+    "moods": [
+      "calm"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:John_Bartmann_-_bowed-voices-master.ogg",
+    "size": 2226718,
+    "sha256": "337d755e99680aa0be07a92fb15146752877961795d7b6e2eae4938cdee631bf"
+  },
+  {
+    "id": "mystery-abandoned-subway",
+    "title": "Abandoned Subway",
+    "artist": "John Bartmann",
+    "file": "mystery-abandoned-subway.ogg",
+    "duration": 244.0,
+    "moods": [
+      "mysterious",
+      "tense"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:John_Bartmann_-_abandoned-subway-master.ogg",
+    "size": 3388869,
+    "sha256": "dc9229d9b32670755fd729eb23698e8420838694e5edaf4008c993c95e5fb45a"
+  },
+  {
+    "id": "mystery-wall-of-glass",
+    "title": "A Wall of Glass",
+    "artist": "John Bartmann",
+    "file": "mystery-wall-of-glass.ogg",
+    "duration": 244.0,
+    "moods": [
+      "mysterious",
+      "calm"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:John_Bartmann_-_a-wall-of-glass-master.ogg",
+    "size": 2863104,
+    "sha256": "cd1ae48cd9dae28dd716aa9f6510977f3fae9da49081c4e8d00f63168e5667d7"
+  },
+  {
+    "id": "tense-dark-dyne",
+    "title": "Dark Dyne",
+    "artist": "John Bartmann",
+    "file": "tense-dark-dyne.ogg",
+    "duration": 244.0,
+    "moods": [
+      "tense",
+      "mysterious"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:John_Bartmann_-_dark-dyne-master.ogg",
+    "size": 3334040,
+    "sha256": "9ef0912b290b4a9d185e28c36a26b6af01c246c417304f76e69429761337b210"
+  },
+  {
+    "id": "epic-endgame",
+    "title": "Endgame",
+    "artist": "John Bartmann",
+    "file": "epic-endgame.ogg",
+    "duration": 244.0,
+    "moods": [
+      "epic",
+      "tense"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:John_Bartmann_-_endgame-master.ogg",
+    "size": 3636847,
+    "sha256": "8e546b6c76e5ae24bbee56e1777f2f724ce7478c2d0f9a1704863502254609ed"
+  },
+  {
+    "id": "epic-blown-wide-worlds",
+    "title": "Blown Wide Worlds",
+    "artist": "John Bartmann",
+    "file": "epic-blown-wide-worlds.ogg",
+    "duration": 244.0,
+    "moods": [
+      "epic",
+      "mysterious"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:John_Bartmann_-_blown-wide-worlds-master.ogg",
+    "size": 3059501,
+    "sha256": "bb145f9e5e48e008a0b2b99eae53359ed7175712ebd4ab984ebc26bbdd8c8287"
+  },
+  {
+    "id": "epic-cendence",
+    "title": "Cendence",
+    "artist": "John Bartmann",
+    "file": "epic-cendence.ogg",
+    "duration": 244.0,
+    "moods": [
+      "epic",
+      "calm"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:John_Bartmann_-_cendence-master.ogg",
+    "size": 3073028,
+    "sha256": "3d7f63fcc80254b5cd7e4b3734cf1ed04d35c2557c2afc819e3a52895f94ba76"
+  },
+  {
+    "id": "sad-albinoni-adagio",
+    "title": "Oboe Concerto in D minor, Op. 9 No. 2 - II. Adagio",
+    "artist": "Tomaso Albinoni (Musopen recording)",
+    "file": "sad-albinoni-adagio.ogg",
+    "duration": 257.8,
+    "moods": [
+      "sad",
+      "calm"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Albinoni,_Concerto_for_Oboe_and_Strings_No._2_in_D_minor,_Op._9,_II._Adagio.ogg",
+    "size": 4544115,
+    "sha256": "973d4afdbff655ba428f161f4f6326adc0737693720322058c0987ee7a9e4c0c"
+  },
+  {
+    "id": "happy-badinerie",
+    "title": "Badinerie (Orchestral Suite No. 2, BWV 1067)",
+    "artist": "Johann Sebastian Bach (Musopen recording)",
+    "file": "happy-badinerie.ogg",
+    "duration": 83.3,
+    "moods": [
+      "happy",
+      "corporate"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Bach,_Johann_Sebastian_-_Suite_No.2_in_B_Minor_-_X._Badinerie.ogg",
+    "size": 1300879,
+    "sha256": "f1458030ec0cb1c2466de6f040f58434feff52174c61ddc18db7064d2a4e8fa5"
+  },
+  {
+    "id": "happy-jazz-at-the-park",
+    "title": "Jazz at the Park",
+    "artist": "Manwithmetalpig",
+    "file": "happy-jazz-at-the-park.ogg",
+    "duration": 205.7,
+    "moods": [
+      "happy",
+      "corporate"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Jazz_at_the_park.ogg",
+    "size": 2088081,
+    "sha256": "33ab712df360103bfc7b70b3626d4a1e7dc4a925319e69ee6534cf1977ef77db"
+  },
+  {
+    "id": "corporate-chill-beat",
+    "title": "Chill Beat",
+    "artist": "Maddy",
+    "file": "corporate-chill-beat.ogg",
+    "duration": 96.2,
+    "moods": [
+      "corporate",
+      "calm"
+    ],
+    "license": "CC0 1.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Chill_Beat.ogg",
+    "size": 2021913,
+    "sha256": "0ebeaac7ed3e8fab0beb2a707d7e2eb048d673583d32d9dccba9a2be9f8e075b"
+  }
+]

@@ -14,9 +14,13 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Project, ProjectStatus, RenderJob, Scene
 from app.services import providers
+from app.services.branding import Branding, logo_path
+from app.services.cards import build_card_scenes
 from app.services.compositor import RenderScene, compute_timeline, render_video
+from app.services.images.crop import OUTPUT_SIZES
 from app.services.images.generator import generate_scene_image
 from app.services.images.prompting import build_prompts
+from app.services.music import Track, resolve_music
 from app.services.scenes import (
     SceneDraft,
     Storyboard,
@@ -25,7 +29,8 @@ from app.services.scenes import (
     split_script,
 )
 from app.services.styles import get_style
-from app.services.subtitles import STYLE_DEFAULTS, build_cues, place_on_timeline
+from app.services.subtitles import build_cues, place_on_timeline
+from app.services.templates import get_template
 from app.services.tts import Word, synthesize_scene
 
 log = logging.getLogger(__name__)
@@ -209,6 +214,16 @@ def _render_scenes(project: Project) -> list[RenderScene]:
     ]  # fmt: skip
 
 
+def project_branding(project: Project) -> Branding:
+    return Branding.model_validate(project.branding_json or {})
+
+
+def project_music(project: Project) -> Track | None:
+    """The track `music_track_id` stands for (auto = by the mood of the scenes)."""
+    moods = [(scene.mood, scene.duration_sec or 0.0) for scene in project.scenes]
+    return resolve_music(project.music_track_id, moods, project.seed)
+
+
 def render_project(db: Session, job_id: int, size: tuple[int, int] | None = None) -> None:
     settings = get_settings()
     job = db.get(RenderJob, job_id)
@@ -218,9 +233,18 @@ def render_project(db: Session, job_id: int, size: tuple[int, int] | None = None
     set_progress(db, project, "render", 5, "Монтируем видео", ProjectStatus.rendering)
     try:
         scenes = _render_scenes(project)
+        template = get_template(job.format)
+        branding = project_branding(project)
+        logo = logo_path(project_dir(project.id))
+        logo = logo if logo.exists() else None
+        out_dir = project_dir(project.id) / "renders" / str(job.id)
+        intro, outro = build_card_scenes(
+            branding, template, size or OUTPUT_SIZES[job.format], out_dir / "work", logo
+        )
+        track = project_music(project)
         result = render_video(
-            scenes, project_dir(project.id) / "renders" / str(job.id), job.format, size=size,
-            music_volume=settings.music_volume, transition_sec=settings.transition_sec,
+            scenes, out_dir, job.format, size=size, template=template, branding=branding,
+            logo=logo, intro=intro, outro=outro, music=track.path if track else None,
             pause=settings.tts_scene_pause_sec, fps=settings.render_fps,
             preset=settings.ffmpeg_preset, concurrency=settings.render_concurrency,
         )  # fmt: skip
@@ -240,27 +264,57 @@ def render_project(db: Session, job_id: int, size: tuple[int, int] | None = None
 
 
 def build_timeline(project: Project) -> dict:
-    """Scene/narration/subtitle tracks as the compositor will lay them out."""
+    """Intro, scene, outro and subtitle tracks as the compositor will lay them out."""
     settings = get_settings()
     scenes = project.scenes
-    durations = [s.duration_sec or 0.0 for s in scenes]
-    if not scenes or not all(durations):
-        return {"ready": False, "total": 0.0, "scenes": [], "cues": []}
-    timeline = compute_timeline(durations, settings.tts_scene_pause_sec, settings.transition_sec)
+    if not scenes or not all(s.duration_sec for s in scenes):
+        return {"ready": False, "total": 0.0, "scenes": [], "cues": [], "music": None}
+    template = get_template(project.format)
+    branding = project_branding(project)
+
+    # (kind, scene, narration length, pause after it)
+    items: list[tuple[str, Scene | None, float, float]] = []
+    if branding.intro_text.strip():
+        items.append(("intro", None, template.intro_seconds, 0.0))
+    items += [("scene", s, s.duration_sec, settings.tts_scene_pause_sec) for s in scenes]
+    if branding.outro_text.strip():
+        items.append(("outro", None, template.outro_seconds, 0.0))
+
+    transition = template.transition.duration
+    timeline = compute_timeline(
+        [d for _, _, d, _ in items], settings.tts_scene_pause_sec, transition,
+        [p for _, _, _, p in items],
+    )  # fmt: skip
     words = place_on_timeline(
         [
-            (start, [Word(**w) for w in s.words_json or []], s.narration)
-            for start, s in zip(timeline.starts, scenes, strict=True)
+            (
+                start,
+                [Word(**w) for w in scene.words_json or []] if scene else [],
+                scene.narration if scene else "",
+            )
+            for start, (_, scene, _, _) in zip(timeline.starts, items, strict=True)
         ]
     )
-    cues = build_cues(words, max_chars=STYLE_DEFAULTS[project.format].max_chars)
+    style = template.subtitle_style(branding)
+    cues = build_cues(words, max_chars=style.max_chars)
+    track = project_music(project)
     return {
         "ready": True,
         "total": timeline.total,
-        "transition": settings.transition_sec,
+        "transition": transition,
         "scenes": [
-            {"id": s.id, "index": s.index, "start": start, "clip": clip, "voice": s.duration_sec}
-            for s, start, clip in zip(scenes, timeline.starts, timeline.clip_durations, strict=True)
+            {
+                "kind": kind,
+                "id": scene.id if scene else None,
+                "index": scene.index if scene else None,
+                "start": start,
+                "clip": clip,
+                "voice": duration if scene else 0.0,
+            }
+            for (kind, scene, duration, _), start, clip in zip(
+                items, timeline.starts, timeline.clip_durations, strict=True
+            )
         ],
         "cues": [{"start": c.start, "end": c.end, "text": c.text} for c in cues],
+        "music": {"id": track.id, "title": track.title, "artist": track.artist} if track else None,
     }

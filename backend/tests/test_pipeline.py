@@ -41,6 +41,7 @@ def test_script_to_video_without_paid_calls(tmp_path):
     report = json.loads(result.report.read_text(encoding="utf-8"))
     assert report["video"] == str(result.video) and len(report["steps"]) == 4
     assert (tmp_path / "out" / "audio" / "narration.json").exists()
+    assert report["steps"][3]["detail"]["music"].startswith("calm-")  # auto: mood of the scenes
 
 
 @requires_ffmpeg

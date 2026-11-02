@@ -205,3 +205,111 @@ def test_parse_txt_and_docx(client):
     resp = client.post("/api/scripts/parse", files={"file": ("s.docx", buf.getvalue())})
     assert resp.json()["text"] == "Первый абзац\nВторой абзац"
     assert client.post("/api/scripts/parse", files={"file": ("a.pdf", b"x")}).status_code == 415
+
+
+def png_bytes(color=(0, 160, 255, 255)) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGBA", (120, 60), color).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_meta_lists_music_fonts_and_templates(client):
+    data = client.get("/api/meta").json()
+    assert len(data["music"]) >= 10 and data["music"][0]["url"].startswith("/api/music/")
+    assert {f["id"] for f in data["fonts"]} == {"PT Sans", "Fira Sans", "Lobster", "Russo One"}
+    assert {t["format"] for t in data["templates"]} == {"9:16", "16:9", "1:1"}
+    assert "top-right" in data["logo_positions"]
+
+
+def test_music_preview_file(client, fakes):
+    track = client.get("/api/meta").json()["music"][0]
+    resp = client.get(track["url"])
+    assert resp.status_code == 200 and resp.headers["content-type"] == "audio/ogg"
+    assert resp.content[:4] == b"OggS"
+    assert client.get("/api/music/nope").status_code == 404
+    with TestClient(app) as anonymous:
+        assert anonymous.get(track["url"]).status_code == 401
+
+
+def test_create_with_music_and_branding(client):
+    project = new_project(
+        client, music="epic-endgame",
+        branding={"font": "Lobster", "intro_text": "Привет", "accent_color": "#ff0000"},
+    )  # fmt: skip
+    assert project["music"] == "epic-endgame"
+    assert project["branding"]["font"] == "Lobster"
+    assert project["branding"]["accent_color"] == "#FF0000" and not project["branding"]["has_logo"]
+    assert client.post("/api/projects", json={"script": "x", "music": "nope"}).status_code == 422
+    bad_font = client.post("/api/projects", json={"script": "x", "branding": {"font": "Arial"}})
+    assert bad_font.status_code == 422
+
+
+def test_auto_music_follows_scene_mood(client):
+    project = analyzed(client)
+    assert project["music"] == "auto" and project["music_track"]["id"].startswith("calm-")
+    off = client.patch(f"/api/projects/{project['id']}", json={"music": "none"}).json()
+    assert off["music"] == "none" and off["music_track"] is None
+    assert client.patch(f"/api/projects/{project['id']}", json={"music": "x"}).status_code == 422
+
+
+def test_music_and_branding_changes_keep_generated_assets(client):
+    project = generated(client)
+    resp = client.patch(
+        f"/api/projects/{project['id']}",
+        json={"music": "happy-badinerie", "branding": {"intro_text": "Hi", "font": "PT Sans"}},
+    )
+    data = resp.json()
+    assert data["status"] == "assets_ready"  # nothing to regenerate
+    assert all(s["image_url"] and s["audio_url"] for s in data["scenes"])
+    assert data["music_track"]["id"] == "happy-badinerie" and data["branding"]["intro_text"] == "Hi"
+
+
+def test_logo_upload_and_delete(client):
+    pid = new_project(client)["id"]
+    resp = client.post(f"/api/projects/{pid}/logo", files={"file": ("l.png", png_bytes())})
+    branding = resp.json()["branding"]
+    assert resp.status_code == 200 and branding["has_logo"]
+    assert client.get(branding["logo_url"]).content.startswith(b"\x89PNG")
+    bad = client.post(f"/api/projects/{pid}/logo", files={"file": ("l.png", b"not an image")})
+    assert bad.status_code == 422 and "прочитать" in bad.json()["detail"]
+    assert client.delete(f"/api/projects/{pid}/logo").json()["branding"]["has_logo"] is False
+
+
+def test_timeline_includes_cards_and_music(client):
+    project = generated(client)
+    pid = project["id"]
+    plain = client.get(f"/api/projects/{pid}/timeline").json()
+    assert [s["kind"] for s in plain["scenes"]] == ["scene"] * 3
+
+    client.patch(
+        f"/api/projects/{pid}", json={"branding": {"intro_text": "In", "outro_text": "Out"}}
+    )
+    framed = client.get(f"/api/projects/{pid}/timeline").json()
+    assert [s["kind"] for s in framed["scenes"]] == ["intro", "scene", "scene", "scene", "outro"]
+    assert framed["scenes"][0]["id"] is None and framed["scenes"][0]["start"] == 0
+    assert framed["scenes"][1]["start"] > 2  # narration starts after the intro card
+    assert framed["total"] > plain["total"] + 4 and framed["music"]["id"].startswith("calm-")
+
+
+@requires_ffmpeg
+@pytest.mark.ffmpeg
+def test_branded_render_matches_planned_timeline(client, fakes):
+    fakes.tts = ToneTTSEngine()
+    pid = generated(client)["id"]
+    client.post(f"/api/projects/{pid}/logo", files={"file": ("l.png", png_bytes())})
+    client.patch(
+        f"/api/projects/{pid}",
+        json={"music": "happy-badinerie",
+              "branding": {"intro_text": "Привет!", "outro_text": "Спасибо!", "font": "PT Sans"}},
+    )  # fmt: skip
+    planned = client.get(f"/api/projects/{pid}/timeline").json()["total"]
+    assert client.post(f"/api/projects/{pid}/render", json={}).status_code == 202
+    after = client.get(f"/api/projects/{pid}").json()
+    assert after["status"] == "done", after["error"]
+    url = after["renders"][0]["video_url"]
+    video = get_settings().storage_dir / url.split("/api/files/")[1].split("?")[0]
+    assert float(probe(video)["format"]["duration"]) == pytest.approx(planned, abs=0.3)

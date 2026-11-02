@@ -12,13 +12,18 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from app.config import Settings, get_settings
+from app.services.branding import Branding
+from app.services.cards import build_card_scenes
 from app.services.compositor import RenderScene, render_video
 from app.services.images import ImageProvider, get_provider
+from app.services.images.crop import OUTPUT_SIZES
 from app.services.images.generator import generate_images
 from app.services.images.prompting import build_prompts
 from app.services.llm.client import LLMClient
+from app.services.music import resolve_music
 from app.services.scenes import Storyboard, split_script
 from app.services.styles import get_style
+from app.services.templates import get_template
 from app.services.tts import TTSEngine, probe_duration, synthesize_scenes, write_manifest
 
 ProgressFn = Callable[[str, float, str], None]
@@ -69,7 +74,9 @@ def run_pipeline(
     llm: LLMClient | None = None,
     image_provider: ImageProvider | None = None,
     tts_engine: TTSEngine | None = None,
-    music: Path | None = None,
+    music: str | Path | None = "auto",
+    branding: Branding | None = None,
+    logo: Path | None = None,
     size: tuple[int, int] | None = None,
     use_cache: bool = True,
     on_progress: ProgressFn | None = None,
@@ -140,20 +147,34 @@ def run_pipeline(
     # 4. Render
     progress("render", 0, "Монтируем видео")
     started = time.monotonic()
+    template = get_template(format)
+    branding = branding or Branding()
+    if isinstance(music, Path):  # an explicit file
+        music_file = music
+    else:  # `auto`, `none` or a library track id
+        moods = [
+            (sc.mood, nar.duration) for sc, nar in zip(storyboard.scenes, narrations, strict=True)
+        ]
+        track = resolve_music(music, moods, seed)
+        music_file = track.path if track else None
     scenes = [
         RenderScene(img.path, nar.path, nar.duration, nar.words, sc.narration, sc.camera)
         for img, nar, sc in zip(images, narrations, storyboard.scenes, strict=True)
     ]
+    intro, outro = build_card_scenes(
+        branding, template, size or OUTPUT_SIZES[format], out_dir / "work", logo
+    )
     rendered = render_video(
-        scenes, out_dir, format, size=size, music=music, music_volume=settings.music_volume,
-        transition_sec=settings.transition_sec, pause=settings.tts_scene_pause_sec,
+        scenes, out_dir, format, size=size, template=template, branding=branding, logo=logo,
+        intro=intro, outro=outro, music=music_file, pause=settings.tts_scene_pause_sec,
         fps=settings.render_fps, preset=settings.ffmpeg_preset,
         concurrency=settings.render_concurrency,
     )  # fmt: skip
     steps.append(
         StepReport(
             "render", time.monotonic() - started, 0.0,
-            {"duration": rendered.duration, **rendered.timings},
+            {"duration": rendered.duration, "music": music_file.name if music_file else None,
+             **rendered.timings},
         )
     )  # fmt: skip
     progress("render", 1, "Готово")

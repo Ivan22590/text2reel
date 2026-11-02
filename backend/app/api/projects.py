@@ -18,16 +18,19 @@ from app.api.auth import require_user
 from app.config import get_settings
 from app.db import SessionLocal, get_db
 from app.models import Project, ProjectStatus, RenderJob, Scene
-from app.services.compositor import DEFAULT_TRANSITIONS
-from app.services.project_jobs import RUNNING, build_timeline
+from app.services.branding import FONTS, BrandingError, logo_path, save_logo
+from app.services.music import get_track, is_valid_choice, load_catalog
+from app.services.project_jobs import RUNNING, build_timeline, project_dir
 from app.services.scenes import CAMERAS
 from app.services.styles import load_style_presets
+from app.services.templates import list_templates
 from app.services.tts import VOICES
 from app.workers import tasks
 
 router = APIRouter(dependencies=[Depends(require_user)])
 
 MAX_UPLOAD_BYTES = 1_000_000
+MAX_LOGO_BYTES = 2_000_000
 
 
 def _project(db: Session, project_id: int) -> Project:
@@ -47,6 +50,11 @@ def _scene(db: Session, scene_id: int) -> Scene:
 def _ensure_idle(project: Project) -> None:
     if project.status in RUNNING:
         raise HTTPException(409, "Проект уже обрабатывается, дождитесь окончания")
+
+
+def _validate_music(music: str | None) -> None:
+    if music is not None and not is_valid_choice(music):
+        raise HTTPException(422, f"Неизвестный трек: {music}")
 
 
 def _validate_choices(style: str | None, voice: str | None) -> None:
@@ -70,8 +78,44 @@ def meta() -> dict:
         ],
         "voices": [{"id": k, "name": v} for k, v in VOICES.items()],
         "cameras": list(CAMERAS),
-        "transitions": DEFAULT_TRANSITIONS,
+        "fonts": [{"id": family, "name": family} for family in FONTS],
+        "logo_positions": ["top-left", "top-right", "bottom-left", "bottom-right"],
+        "music": [
+            {
+                "id": t.id,
+                "title": t.title,
+                "artist": t.artist,
+                "duration": t.duration,
+                "moods": t.moods,
+                "url": f"/api/music/{t.id}",
+            }
+            for t in load_catalog()
+        ],
+        "templates": [
+            {
+                "id": t.id,
+                "name": t.name,
+                "format": t.format,
+                "font": t.font,
+                "subtitle_mode": t.subtitles.mode,
+                "transition": t.transition.type,
+                "transition_duration": t.transition.duration,
+                "logo_position": t.logo.position,
+                "intro_seconds": t.intro_seconds,
+                "outro_seconds": t.outro_seconds,
+            }
+            for t in list_templates()
+        ],
     }
+
+
+@router.get("/music/{track_id}")
+def music_file(track_id: str) -> FileResponse:
+    """Preview of a library track (Range requests are supported)."""
+    track = get_track(track_id)
+    if track is None or not track.path.is_file():
+        raise HTTPException(404, "Трек не найден")
+    return FileResponse(track.path, media_type="audio/ogg")
 
 
 @router.post("/scripts/parse")
@@ -115,6 +159,7 @@ def list_projects(db: Session = Depends(get_db)) -> list[schemas.ProjectOut]:
 @router.post("/projects", status_code=201)
 def create_project(body: schemas.ProjectCreate, db: Session = Depends(get_db)):
     _validate_choices(body.style, body.voice)
+    _validate_music(body.music)
     today = datetime.combine(datetime.now(UTC).date(), time.min, tzinfo=UTC)
     created_today = db.scalar(select(func.count(Project.id)).where(Project.created_at >= today))
     if created_today >= get_settings().demo_max_projects_per_day:
@@ -122,7 +167,8 @@ def create_project(body: schemas.ProjectCreate, db: Session = Depends(get_db)):
     title = body.title or body.script.strip().split("\n")[0][:60]
     project = Project(
         title=title, script=body.script.strip(), style=body.style, format=body.format,
-        voice=body.voice, seed=random.randint(1, 2**31 - 1),
+        voice=body.voice, seed=random.randint(1, 2**31 - 1), music_track_id=body.music,
+        branding_json=body.branding.model_dump() if body.branding else {},
     )  # fmt: skip
     db.add(project)
     db.commit()
@@ -141,7 +187,13 @@ def update_project(
     project = _project(db, project_id)
     _ensure_idle(project)
     _validate_choices(body.style, body.voice)
+    _validate_music(body.music)
     changes = body.model_dump(exclude_none=True)
+    # Music and branding only matter at render time: they never invalidate scenes.
+    if "music" in changes:
+        project.music_track_id = changes.pop("music")
+    if "branding" in changes:
+        project.branding_json = changes.pop("branding")
     if "script" in changes and changes["script"] != project.script:
         project.scenes.clear()  # scenes no longer match the text
         project.status = ProjectStatus.draft
@@ -156,6 +208,28 @@ def update_project(
     if project.scenes and any(not (s.image_path and s.audio_path) for s in project.scenes):
         project.status = ProjectStatus.scenes_ready
     db.commit()
+    return schemas.project_out(project)
+
+
+@router.post("/projects/{project_id}/logo")
+async def upload_logo(
+    project_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)
+) -> schemas.ProjectOut:
+    project = _project(db, project_id)
+    _ensure_idle(project)
+    data = await file.read(MAX_LOGO_BYTES + 1)
+    try:
+        save_logo(data, logo_path(project_dir(project_id)))
+    except BrandingError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return schemas.project_out(project)
+
+
+@router.delete("/projects/{project_id}/logo")
+def delete_logo(project_id: int, db: Session = Depends(get_db)) -> schemas.ProjectOut:
+    project = _project(db, project_id)
+    _ensure_idle(project)
+    logo_path(project_dir(project_id)).unlink(missing_ok=True)
     return schemas.project_out(project)
 
 
@@ -216,9 +290,9 @@ def timeline(project_id: int, db: Session = Depends(get_db)) -> dict:
     data = build_timeline(project)
     by_id = {s.id: s for s in project.scenes}
     for item in data["scenes"]:
-        scene = by_id[item["id"]]
-        item["image_url"] = schemas.file_url(scene.image_path)
-        item["narration"] = scene.narration
+        scene = by_id.get(item["id"])  # intro/outro cards have no scene
+        item["image_url"] = schemas.file_url(scene.image_path) if scene else None
+        item["narration"] = scene.narration if scene else ""
     return data
 
 

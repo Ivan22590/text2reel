@@ -1,0 +1,17 @@
+{
+  "id": "youtube_16x9",
+  "name": "YouTube",
+  "format": "16:9",
+  "font": "PT Sans",
+  "safe_area": {"top": 0.05, "bottom": 0.08},
+  "subtitles": {
+    "mode": "phrase", "size": 56, "alignment": 2, "margin_v": 80, "max_chars": 42,
+    "outline": 4, "color": "#FFFFFF", "highlight": "#FFD700"
+  },
+  "transition": {"type": "fade", "duration": 0.5},
+  "ken_burns_zoom": 0.12,
+  "music_volume": 0.25,
+  "logo": {"position": "bottom-right", "scale": 0.12, "opacity": 0.85},
+  "intro_seconds": 2.5,
+  "outro_seconds": 3.0
+}

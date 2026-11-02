@@ -1,7 +1,6 @@
 import pytest
 
 from app.services.subtitles import (
-    STYLE_DEFAULTS,
     attach_punctuation,
     build_cues,
     place_on_timeline,
@@ -9,6 +8,7 @@ from app.services.subtitles import (
     to_ass,
     to_srt,
 )
+from app.services.templates import get_template
 from app.services.tts import Word
 
 
@@ -59,12 +59,12 @@ def test_ass_phrase_and_karaoke():
     cues = build_cues(
         place_on_timeline([(1.0, words_from("Hello {big} world."), "Hello {big} world.")])
     )
-    phrase = to_ass(cues, 1920, 1080, STYLE_DEFAULTS["16:9"])
+    phrase = to_ass(cues, 1920, 1080, get_template("16:9").subtitle_style())
     assert "PlayResX: 1920" in phrase and "PlayResY: 1080" in phrase
     assert "Dialogue: 0,0:00:01.00," in phrase
     assert "(big)" in phrase and "{big}" not in phrase  # braces would be override tags
 
-    karaoke = to_ass(cues, 1080, 1920, STYLE_DEFAULTS["9:16"])
+    karaoke = to_ass(cues, 1080, 1920, get_template("9:16").subtitle_style())
     assert "{\\kf40}Hello" in karaoke
     style_line = next(line for line in karaoke.splitlines() if line.startswith("Style:"))
     assert ",5,60,60,0,1" in style_line  # middle-centre alignment for vertical video

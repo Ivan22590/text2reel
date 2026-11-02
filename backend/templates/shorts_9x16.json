@@ -1,0 +1,17 @@
+{
+  "id": "shorts_9x16",
+  "name": "Shorts / Reels / TikTok",
+  "format": "9:16",
+  "font": "Fira Sans",
+  "safe_area": {"top": 0.12, "bottom": 0.2},
+  "subtitles": {
+    "mode": "karaoke", "size": 78, "alignment": 5, "margin_v": 0, "max_chars": 22,
+    "outline": 4, "color": "#FFFFFF", "highlight": "#FFD700"
+  },
+  "transition": {"type": "slideleft", "duration": 0.4},
+  "ken_burns_zoom": 0.15,
+  "music_volume": 0.2,
+  "logo": {"position": "top-right", "scale": 0.16, "opacity": 0.9},
+  "intro_seconds": 2.2,
+  "outro_seconds": 2.6
+}

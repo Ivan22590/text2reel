@@ -7,26 +7,59 @@ python -m app.cli images storyboard.json --style anime --format 9:16 --out-dir o
 python -m app.cli tts storyboard.json --voice ru-RU-SvetlanaNeural --format 9:16 --out-dir out/
 python -m app.cli compose --storyboard storyboard.json --images out/ --narration out/narration.json
 python -m app.cli render script.txt --style anime --format 9:16 --out-dir out/   # everything
+python -m app.cli music                          # background music library
 """
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
 
 from app.config import get_settings
 from app.prompts.loader import load_prompt
+from app.services.branding import FONTS, Branding
+from app.services.cards import build_card_scenes
 from app.services.compositor import RenderScene, render_video
 from app.services.images import get_provider
 from app.services.images.crop import OUTPUT_SIZES
 from app.services.images.generator import generate_images
 from app.services.images.prompting import build_prompts
 from app.services.llm.client import LLMClient, LLMError
+from app.services.music import is_valid_choice, load_catalog, resolve_music
 from app.services.pipeline import PipelineError, run_pipeline
 from app.services.scenes import FORMATS, Storyboard, split_script
 from app.services.styles import get_style, load_style_presets
-from app.services.subtitles import STYLE_DEFAULTS, build_cues, place_on_timeline, to_ass, to_srt
+from app.services.subtitles import build_cues, place_on_timeline, to_ass, to_srt
+from app.services.templates import get_template
 from app.services.tts import VOICES, read_manifest, synthesize_scenes, write_manifest
+
+
+def _music_arg(value: str) -> str | Path:
+    """`auto`, `none`, a library track id (see `music`) or a path to an audio file."""
+    if Path(value).is_file():
+        return Path(value)
+    if not is_valid_choice(value):
+        raise SystemExit(f"unknown --music {value!r}: use auto, none, a track id or a file path")
+    return value
+
+
+def _branding_args(args: argparse.Namespace) -> tuple[Branding, Path | None]:
+    data = {}
+    if args.branding:
+        data = json.loads(Path(args.branding).read_text(encoding="utf-8"))
+    for key in ("intro_text", "outro_text", "font"):
+        if getattr(args, key, None):
+            data[key] = getattr(args, key)
+    return Branding.model_validate(data), Path(args.logo) if args.logo else None
+
+
+def cmd_music(_: argparse.Namespace) -> int:
+    for track in load_catalog():
+        mins, secs = divmod(int(track.duration), 60)
+        moods = ",".join(track.moods)
+        print(f"{track.id:28} {mins}:{secs:02d}  {moods:20} {track.title} - {track.artist}")
+    return 0
 
 
 def cmd_llm_models(args: argparse.Namespace) -> int:
@@ -139,7 +172,7 @@ def cmd_tts(args: argparse.Namespace) -> int:
     for item, text in zip(results, texts, strict=True):
         placed.append((offset, item.words, text))
         offset += item.duration + settings.tts_scene_pause_sec
-    style = STYLE_DEFAULTS[args.format]
+    style = get_template(args.format).subtitle_style()
     cues = build_cues(place_on_timeline(placed), max_chars=style.max_chars)
     (out_dir / "subtitles.srt").write_text(to_srt(cues), encoding="utf-8")
     (out_dir / "subtitles.ass").write_text(
@@ -164,10 +197,22 @@ def cmd_compose(args: argparse.Namespace) -> int:
                     sc.narration, sc.camera)
         for n, sc in zip(narrations, storyboard.scenes, strict=True)
     ]  # fmt: skip
+    template = get_template(args.format)
+    branding, logo = _branding_args(args)
+    out_dir = Path(args.out_dir)
+    intro, outro = build_card_scenes(
+        branding, template, OUTPUT_SIZES[args.format], out_dir / "work", logo
+    )
+    music = _music_arg(args.music)
+    if isinstance(music, Path):
+        music_file = music
+    else:
+        moods = [(sc.mood, n.duration) for sc, n in zip(storyboard.scenes, narrations, strict=True)]
+        track = resolve_music(music, moods, args.seed)
+        music_file = track.path if track else None
     result = render_video(
-        scenes, Path(args.out_dir), args.format,
-        music=Path(args.music) if args.music else None, music_volume=settings.music_volume,
-        transition_sec=settings.transition_sec, pause=settings.tts_scene_pause_sec,
+        scenes, out_dir, args.format, template=template, branding=branding, logo=logo,
+        intro=intro, outro=outro, music=music_file, pause=settings.tts_scene_pause_sec,
         fps=settings.render_fps, preset=settings.ffmpeg_preset,
         concurrency=settings.render_concurrency,
     )  # fmt: skip
@@ -182,12 +227,13 @@ def cmd_render(args: argparse.Namespace) -> int:
     def on_progress(step: str, percent: float, message: str) -> None:
         print(f"[{percent:5.1f}%] {step}: {message}", file=sys.stderr)
 
+    branding, logo = _branding_args(args)
     try:
         result = run_pipeline(
             Path(args.script).read_text(encoding="utf-8"),
             style=args.style, format=args.format, voice=args.voice, seed=args.seed,
-            out_dir=Path(args.out_dir), music=Path(args.music) if args.music else None,
-            use_cache=not args.no_cache, on_progress=on_progress, settings=settings,
+            out_dir=Path(args.out_dir), music=_music_arg(args.music), branding=branding,
+            logo=logo, use_cache=not args.no_cache, on_progress=on_progress, settings=settings,
         )  # fmt: skip
     except PipelineError as exc:
         print(f"FAILED: {exc}", file=sys.stderr)
@@ -199,6 +245,15 @@ def cmd_render(args: argparse.Namespace) -> int:
         f"{result.cost_rub:.2f} RUB | report: {result.report}"
     )
     return 0
+
+
+def _add_music_and_branding_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--music", default="auto", help="auto | none | track id | audio file")
+    parser.add_argument("--branding", default=None, help="JSON with brand settings")
+    parser.add_argument("--logo", default=None, help="logo image (PNG with alpha is best)")
+    parser.add_argument("--intro-text", dest="intro_text", default=None, help="intro card title")
+    parser.add_argument("--outro-text", dest="outro_text", default=None, help="outro card title")
+    parser.add_argument("--font", default=None, choices=sorted(FONTS), help="subtitle/card font")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -241,12 +296,16 @@ def build_parser() -> argparse.ArgumentParser:
     tts.add_argument("--no-cache", action="store_true")
     tts.set_defaults(func=cmd_tts)
 
+    music = sub.add_parser("music", help="list the background music library")
+    music.set_defaults(func=cmd_music)
+
     compose = sub.add_parser("compose", help="render video from existing images + narration")
     compose.add_argument("--storyboard", required=True)
     compose.add_argument("--images", required=True, help="dir with scene_XX.png")
     compose.add_argument("--narration", required=True, help="narration.json from `tts`")
     compose.add_argument("--format", default="9:16", choices=FORMATS)
-    compose.add_argument("--music", default=None, help="background music file")
+    compose.add_argument("--seed", type=int, default=42, help="seed for the automatic music pick")
+    _add_music_and_branding_args(compose)
     compose.add_argument("--out-dir", default="out")
     compose.set_defaults(func=cmd_compose)
 
@@ -256,7 +315,7 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--format", default="9:16", choices=FORMATS)
     render.add_argument("--voice", default=get_settings().tts_voice, choices=sorted(VOICES))
     render.add_argument("--seed", type=int, default=42)
-    render.add_argument("--music", default=None, help="background music file")
+    _add_music_and_branding_args(render)
     render.add_argument("--out-dir", default="out")
     render.add_argument("--no-cache", action="store_true")
     render.set_defaults(func=cmd_render)

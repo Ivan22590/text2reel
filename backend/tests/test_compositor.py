@@ -1,13 +1,21 @@
-import pytest
+import io
+from pathlib import Path
 
+import pytest
+from PIL import Image
+
+from app.services.branding import Branding, logo_path, save_logo
+from app.services.cards import build_card_scenes
 from app.services.compositor import (
     RenderScene,
     audio_cmd,
     compose_cmd,
     compute_timeline,
     kenburns_cmd,
+    logo_overlay,
     render_video,
 )
+from app.services.templates import get_template
 from tests.media import fake_words, make_image, make_tone, probe, requires_ffmpeg
 
 
@@ -154,3 +162,86 @@ def test_render_video_with_music(tmp_path):
     assert float(probe(result.video)["format"]["duration"]) == pytest.approx(
         result.duration, abs=0.3
     )
+
+
+def test_timeline_with_cards_has_no_pause_around_them():
+    # intro card (2.2 s, no pause), one scene (3 s + 0.4 pause), outro card (2.6 s)
+    tl = compute_timeline([2.2, 3.0, 2.6], 0.4, 0.4, pauses=[0.0, 0.4, 0.0])
+    assert tl.clip_durations == pytest.approx([2.6, 3.8, 2.6])
+    assert tl.starts == pytest.approx([0.0, 2.2, 5.6])  # narration starts when the intro ends
+    assert tl.total == pytest.approx(8.2)
+
+
+def test_audio_cmd_music_fades_in_and_out(tmp_path):
+    cmd = audio_cmd([tmp_path / "a.mp3"], [0.0], 3.0, tmp_path / "o.m4a", music=tmp_path / "m.ogg")
+    graph = arg_after(cmd, "-filter_complex")
+    assert "afade=t=in:st=0:d=0.8,afade=t=out:st=1.500:d=1.500[music]" in graph
+    assert "atrim=0:3.000,afade" in graph  # trimmed first, then faded
+
+
+def test_kenburns_uses_template_zoom(tmp_path):
+    cmd = kenburns_cmd(tmp_path / "a.png", tmp_path / "c.mp4", 2.0, (320, 180), "zoom_in", zoom=0.3)
+    assert "z='1+0.3*on/60'" in arg_after(cmd, "-vf")
+
+
+def test_logo_overlay_respects_safe_zones():
+    shorts = logo_overlay(
+        Path("logo.png"), "top-right", 0.16, 0.9, (1080, 1920), 0.12, 0.2, 2.2, 9.0
+    )
+    assert (shorts.width, shorts.x, shorts.y) == (173, "W-w-43", "230")  # below the top UI band
+    wide = logo_overlay(Path("l.png"), "bottom-left", 0.12, 1.0, (1920, 1080), 0.05, 0.08, 0, 5)
+    assert (wide.x, wide.y) == ("77", "H-h-86")
+
+
+def test_compose_cmd_adds_logo_for_narrated_scenes_only(tmp_path):
+    tl = compute_timeline([2.0, 3.0], 0.4, 0.4)
+    logo = logo_overlay(tmp_path / "logo.png", "top-right", 0.16, 0.85, (1080, 1920),
+                        0.12, 0.2, 0.4, 2.8)  # fmt: skip
+    cmd = compose_cmd([tmp_path / "c0.mp4", tmp_path / "c1.mp4"], tl, tmp_path / "a.m4a",
+                      "s.ass", tmp_path / "v.mp4", logo=logo)  # fmt: skip
+    graph = arg_after(cmd, "-filter_complex")
+    assert cmd.count("-i") == 4  # two clips, audio, logo
+    assert cmd.index(str(tmp_path / "logo.png")) == cmd.index(str(tmp_path / "a.m4a")) + 2
+    assert "[3:v]scale=173:-1,format=rgba,colorchannelmixer=aa=0.85[lg]" in graph
+    assert "[x1][lg]overlay=x=W-w-43:y=230:enable='between(t,0.400,2.800)'[vl]" in graph
+    assert graph.endswith("[vl]ass=s.ass[v]")  # subtitles are drawn above the logo
+    assert [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-map"] == ["[v]", "2:a"]
+
+
+@requires_ffmpeg
+@pytest.mark.ffmpeg
+def test_render_with_branding_cards_logo_and_music(tmp_path):
+    size = (180, 320)
+    scenes = make_scenes(tmp_path, [1.2, 1.0])
+    template = get_template("9:16")
+    branding = Branding(intro_text="Привет, мир!", outro_text="Подписывайтесь!", font="Lobster",
+                        subtitle_color="#FFFF00")  # fmt: skip
+    logo = logo_path(tmp_path / "project")
+    save_logo(_png(60, 60), logo)
+    out_dir = tmp_path / "out"
+    intro, outro = build_card_scenes(branding, template, size, out_dir / "work", logo)
+    music = make_tone(tmp_path / "music.mp3", 0.7, 220)
+
+    result = render_video(scenes, out_dir, "9:16", size=size, template=template, branding=branding,
+                          logo=logo, intro=intro, outro=outro, music=music, fps=15)  # fmt: skip
+
+    narrated = 1.2 + 1.0 + 2 * 0.4
+    cards = template.intro_seconds + template.outro_seconds
+    # every transition overlaps the clips: total = sum(d + p) of all scenes
+    assert result.duration == pytest.approx(narrated + cards, abs=0.01)
+    info = probe(result.video)
+    assert float(info["format"]["duration"]) == pytest.approx(result.duration, abs=0.3)
+    assert {s["codec_type"] for s in info["streams"]} == {"video", "audio"}
+
+    srt = result.srt.read_text(encoding="utf-8")
+    first_cue = srt.splitlines()[1]
+    assert first_cue.startswith("00:00:02,200")  # narration waits for the intro card
+    assert "Привет" not in srt and "Подписывайтесь" not in srt  # cards carry no subtitles
+    ass = result.ass.read_text(encoding="utf-8")
+    assert "Style: Default,Lobster," in ass and "&H0000FFFF" in ass  # brand font and colour
+
+
+def _png(width: int, height: int) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGBA", (width, height), (0, 160, 255, 255)).save(buf, "PNG")
+    return buf.getvalue()

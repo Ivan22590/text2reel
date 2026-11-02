@@ -5,6 +5,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
+from app.services.branding import Branding, logo_path
+from app.services.project_jobs import project_branding, project_dir, project_music
 from app.services.scenes import FORMATS, MAX_SCRIPT_CHARS
 
 Format = Literal[FORMATS]
@@ -29,6 +31,8 @@ class ProjectCreate(BaseModel):
     style: str = "realism"
     format: Format = "9:16"
     voice: str = "ru-RU-SvetlanaNeural"
+    music: str = "auto"  # auto | none | track id
+    branding: Branding | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -37,6 +41,8 @@ class ProjectUpdate(BaseModel):
     style: str | None = None
     format: Format | None = None
     voice: str | None = None
+    music: str | None = None
+    branding: Branding | None = None
 
 
 class SceneUpdate(BaseModel):
@@ -80,6 +86,17 @@ class RenderJobOut(BaseModel):
     cost_rub: float
 
 
+class BrandingOut(Branding):
+    has_logo: bool = False
+    logo_url: str | None = None
+
+
+class TrackBrief(BaseModel):
+    id: str
+    title: str
+    artist: str
+
+
 class ProjectOut(BaseModel):
     id: int
     title: str
@@ -87,6 +104,9 @@ class ProjectOut(BaseModel):
     style: str
     format: str
     voice: str
+    music: str
+    music_track: TrackBrief | None  # the track that will play (the pick in `auto` mode)
+    branding: BrandingOut
     status: str
     step: str
     progress: float
@@ -114,9 +134,23 @@ def job_out(j) -> RenderJobOut:
     )  # fmt: skip
 
 
+def branding_out(p) -> BrandingOut:
+    logo = logo_path(project_dir(p.id))
+    return BrandingOut(
+        **project_branding(p).model_dump(),
+        has_logo=logo.exists(),
+        logo_url=file_url(str(logo)) if logo.exists() else None,
+    )
+
+
 def project_out(p, with_details: bool = True) -> ProjectOut:
+    track = project_music(p) if p.scenes else None
     return ProjectOut(
         id=p.id, title=p.title, script=p.script, style=p.style, format=p.format, voice=p.voice,
+        music=p.music_track_id or "auto",
+        music_track=TrackBrief(id=track.id, title=track.title, artist=track.artist)
+        if track else None,
+        branding=branding_out(p),
         status=p.status, step=p.step, progress=p.progress, message=p.message, error=p.error,
         cost_rub=round(p.cost_rub, 2), created_at=p.created_at,
         scenes=[scene_out(s) for s in p.scenes] if with_details else [],

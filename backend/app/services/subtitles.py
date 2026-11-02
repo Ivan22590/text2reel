@@ -43,14 +43,6 @@ class SubtitleStyle:
     max_chars: int = 36
 
 
-# Defaults per format; stage 6 templates (templates/*.json) override them.
-STYLE_DEFAULTS = {
-    "9:16": SubtitleStyle(size=78, alignment=5, margin_v=0, mode="karaoke", max_chars=22),
-    "16:9": SubtitleStyle(size=56, alignment=2, margin_v=80, mode="phrase", max_chars=42),
-    "1:1": SubtitleStyle(size=62, alignment=2, margin_v=110, mode="phrase", max_chars=30),
-}
-
-
 def _norm(text: str) -> str:
     return re.sub(r"\W+", "", text.lower())
 

@@ -1,0 +1,17 @@
+{
+  "id": "instagram_1x1",
+  "name": "Instagram",
+  "format": "1:1",
+  "font": "Fira Sans",
+  "safe_area": {"top": 0.06, "bottom": 0.12},
+  "subtitles": {
+    "mode": "phrase", "size": 62, "alignment": 2, "margin_v": 110, "max_chars": 30,
+    "outline": 4, "color": "#FFFFFF", "highlight": "#FFD700"
+  },
+  "transition": {"type": "fade", "duration": 0.4},
+  "ken_burns_zoom": 0.12,
+  "music_volume": 0.22,
+  "logo": {"position": "top-right", "scale": 0.14, "opacity": 0.9},
+  "intro_seconds": 2.2,
+  "outro_seconds": 2.6
+}
