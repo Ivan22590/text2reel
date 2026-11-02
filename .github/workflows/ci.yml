@@ -23,6 +23,13 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
+      - name: Render sample frames (fonts, logo, cards, subtitles)
+        run: python -m tests.sample_frames sample-frames
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sample-frames
+          path: backend/sample-frames/*.png
+          retention-days: 7
 
   frontend:
     runs-on: ubuntu-latest

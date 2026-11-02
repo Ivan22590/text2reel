@@ -29,3 +29,4 @@ examples/*.mp4
 .idea/
 .vscode/
 *.tsbuildinfo
+backend/sample-frames/
