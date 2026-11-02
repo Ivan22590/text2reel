@@ -7,6 +7,7 @@
 | Веха | Содержание | Статус |
 |---|---|---|
 | **M0. Документация** | ТЗ, архитектура, промпты, roadmap, README | ✅ |
+| **M0.5. Каркас** | Репозиторий, backend/frontend-каркас, compose, CI | 🔄 ждёт проверки на VPS |
 | **M1. Пайплайн из CLI** | Сценарий превращается в MP4 одной командой (этапы 1–4) | ⏳ |
 | **M2. MVP с UI** | Веб-интерфейс, очереди, прогресс (этап 5) | ⏳ |
 | **M3. Демо-стенд** | Музыка, шаблоны, брендинг, деплой (этапы 6–7) | ⏳ |
@@ -19,11 +20,13 @@
 - [x] ТЗ (`docs/TZ.md`)
 - [x] README, ARCHITECTURE, MODELS_AND_COSTS, PROMPTS, COMPETITORS, DEPLOY, DEMO_SCRIPT, SUBMISSION_CHECKLIST
 - [x] `CLAUDE.md`, `.env.example`, `.gitignore`, LICENSE, NOTICE
-- [ ] Публичный репозиторий на GitHub
-- [ ] Каркас backend (FastAPI, конфиг, модели, Alembic)
-- [ ] Каркас frontend (Vite + React + TS + AntD)
-- [ ] `docker-compose.yml` (api, worker, redis, frontend)
-- [ ] CI: ruff + pytest + eslint
+- [x] Публичный репозиторий на GitHub (https://github.com/Ivan22590/text2reel)
+- [x] Каркас backend: FastAPI, конфиг, модели, загрузчик промптов, Celery (очереди `ai`/`render`), `/api/health`
+- [ ] Alembic-миграции (пока `create_all`)
+- [x] Каркас frontend (Vite + React + TS + AntD), страница статуса API
+- [x] `docker-compose.yml` (api, worker-ai, worker-render, redis, frontend) и `docker-compose.prod.yml` (postgres, caddy)
+- [ ] Проверка `docker compose up` на VPS
+- [x] CI: ruff + pytest + eslint + build (GitHub Actions)
 
 **Готово, когда** `docker compose up` поднимает пустые сервисы, а `/health` отвечает 200.
 

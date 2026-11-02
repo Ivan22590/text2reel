@@ -8,6 +8,7 @@
 - 2026-11-02: Комплект документации: ТЗ, README, ROADMAP, ARCHITECTURE, MODELS_AND_COSTS, PROMPTS, COMPETITORS, DEPLOY, DEMO_SCRIPT, METRICS, SUBMISSION_CHECKLIST.
 - 2026-11-02: Черновики продуктовых промптов в `backend/prompts/` (scene_split, scene_regenerate, image_prompt, style_presets, music_mood).
 - 2026-11-02: `CLAUDE.md` с правилом синхронизации документации, `.env.example`, `.gitignore`, LICENSE, NOTICE.
+- 2026-11-02: Каркас: backend (FastAPI, pydantic-settings, SQLAlchemy-модели Project/Scene/RenderJob, загрузчик промптов, Celery с очередями `ai`/`render`, `/api/health`, тесты), frontend (Vite + React + TS + AntD), `docker-compose.yml`, `docker-compose.prod.yml`, `Caddyfile`, CI в GitHub Actions.
 
 ### Decided
 - LLM через ProxyAPI: Claude Haiku 5.5 (основная), DeepSeek V4.1 Flash (запасная).

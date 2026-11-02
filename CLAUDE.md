@@ -37,7 +37,7 @@ Text2Reel — учебный проект Zerocoder: платформа «тек
 ## Команды (целевые, актуализировать по мере появления кода)
 ```bash
 docker compose up --build                     # весь стек
-cd backend && pytest                          # тесты backend
+cd backend && source .venv/bin/activate && pytest   # тесты backend (в .venv)
 cd backend && ruff check . && ruff format .   # линт
 cd frontend && npm run dev | npm run lint
 python -m app.cli render script.txt --style anime --format 9:16   # пайплайн из CLI

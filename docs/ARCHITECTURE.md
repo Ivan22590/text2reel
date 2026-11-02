@@ -67,6 +67,7 @@ RenderJob
 
 | Метод | Путь | Описание |
 |---|---|---|
+| GET | `/api/health` | ✅ Статус API, версия, выбранные модели |
 | POST | `/api/auth/login` | Демо-логин, выдаёт cookie-сессию |
 | GET | `/api/meta` | Стили, форматы, голоса, треки, шаблоны |
 | POST | `/api/projects` | Создать проект (текст или файл) |
@@ -95,7 +96,8 @@ RenderJob
 | `services/compositor.py` | Построение и запуск FFmpeg-команд |
 | `services/music.py` | Каталог треков, подбор по `mood` |
 | `services/templates.py` | Загрузка JSON-шаблонов форматов |
-| `prompts/loader.py` | Чтение `backend/prompts/*.md`, подстановка переменных |
+| `app/prompts/loader.py` | ✅ Чтение `backend/prompts/*.md` (YAML front matter + секции `## system`/`## user`), подстановка `{{var}}`, ошибка при отсутствии переменной |
+| `app/workers/celery_app.py` | ✅ Celery: маршрутизация `tasks.ai.*` → `ai`, `tasks.render.*` → `render`; `CELERY_EAGER=true` для тестов |
 
 ## 6. Рецепты FFmpeg (черновик)
 

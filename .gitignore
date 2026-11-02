@@ -28,3 +28,4 @@ examples/*.mp4
 .DS_Store
 .idea/
 .vscode/
+*.tsbuildinfo

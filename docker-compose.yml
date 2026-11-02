@@ -1,0 +1,45 @@
+# Dev stack: docker compose up --build
+x-backend: &backend
+  build: ./backend
+  env_file: .env
+  environment:
+    REDIS_URL: redis://redis:6379/0
+    DATABASE_URL: sqlite:////data/app.db
+    STORAGE_DIR: /data
+  volumes:
+    - ./backend:/app
+    - storage:/data
+  depends_on:
+    - redis
+
+services:
+  api:
+    <<: *backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+
+  worker-ai:
+    <<: *backend
+    command: celery -A app.workers.celery_app worker -Q ai -c 4 -n ai@%h -l info
+
+  worker-render:
+    <<: *backend
+    command: celery -A app.workers.celery_app worker -Q render -c ${RENDER_CONCURRENCY:-2} -n render@%h -l info
+
+  redis:
+    image: redis:7.4-alpine
+
+  frontend:
+    build: ./frontend
+    environment:
+      API_PROXY_TARGET: http://api:8000
+    volumes:
+      - ./frontend/src:/app/src
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  storage:

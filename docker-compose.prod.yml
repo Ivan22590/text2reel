@@ -1,0 +1,63 @@
+# Prod overrides: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+x-prod-backend: &prod-backend
+  environment:
+    APP_ENV: prod
+    REDIS_URL: redis://redis:6379/0
+    DATABASE_URL: postgresql+psycopg://text2reel:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/text2reel
+    STORAGE_DIR: /data
+  volumes:
+    - storage:/data
+  restart: unless-stopped
+
+services:
+  api:
+    <<: *prod-backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    ports: !reset []
+    depends_on: [redis, postgres]
+
+  worker-ai:
+    <<: *prod-backend
+
+  worker-render:
+    <<: *prod-backend
+
+  redis:
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: text2reel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: text2reel
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  frontend:
+    # build static bundle once; Caddy serves it from the shared volume
+    command: sh -c "npm run build && rm -rf /srv/frontend/* && cp -r dist/. /srv/frontend/"
+    ports: !reset []
+    volumes:
+      - frontend_dist:/srv/frontend
+    restart: "no"
+
+  caddy:
+    image: caddy:2.8-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - frontend_dist:/srv/frontend:ro
+      - caddy_data:/data
+    depends_on: [api]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  frontend_dist:
+  caddy_data:

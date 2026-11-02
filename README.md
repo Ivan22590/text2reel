@@ -9,6 +9,7 @@
 | Компонент | Статус |
 |---|---|
 | Документация (ТЗ, архитектура, промпты, roadmap) | ✅ готово (черновик v0.1) |
+| Каркас (FastAPI, модели, Celery, React, Docker Compose, CI) | 🔄 написан, ждёт проверки на VPS |
 | Бэкенд-пайплайн (сцены → картинки → TTS → FFmpeg) | ⏳ не начат |
 | Frontend | ⏳ не начат |
 | Музыка, шаблоны, брендинг | ⏳ не начат |
@@ -54,7 +55,7 @@ React (Vite + Ant Design) ──REST/SSE──▶ FastAPI ──▶ Redis ──
 
 ## Быстрый старт
 
-> ⚠️ Код ещё не написан. Команды ниже — целевая инструкция, её актуализируем по мере реализации.
+> ⚠️ Пока готов только каркас: API отвечает на `/api/health`, а фронтенд показывает статус API. Пайплайн генерации ещё не реализован.
 
 ### Требования
 - Docker 24+ и Docker Compose v2
@@ -68,7 +69,9 @@ cp .env.example .env        # впишите PROXYAPI_KEY и FAL_KEY
 docker compose up --build
 ```
 - Интерфейс: http://localhost:5173
-- API и Swagger: http://localhost:8000/docs
+- API и Swagger: http://localhost:8000/docs, проверка: http://localhost:8000/api/health
+
+Prod: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build` (см. [docs/DEPLOY.md](docs/DEPLOY.md))
 
 ### Разработка (на VPS, см. [docs/DEPLOY.md §0](docs/DEPLOY.md))
 Python-зависимости ставятся только в виртуальное окружение `backend/.venv`.
@@ -78,7 +81,7 @@ cd backend && python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest && ruff check .
 uvicorn app.main:app --reload
-celery -A app.workers.celery_app worker -Q ai,render -l info
+celery -A app.workers.celery_app worker -Q ai,render -l info   # нужен Redis
 
 # frontend
 cd frontend && npm install && npm run dev
