@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     storage_ttl_days: int = 7
     render_concurrency: int = 2
     ffmpeg_preset: str = "veryfast"
+    render_fps: int = 30
+    transition_sec: float = 0.4
+    music_volume: float = 0.25
 
     # Run Celery tasks inline (no broker); used in tests.
     celery_eager: bool = False

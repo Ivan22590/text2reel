@@ -41,6 +41,8 @@ POST /projects/{id}/render       ──▶ [render] compose(format) ──▶ ex
 4. **compose.** Одна картинка на сцену превращается в клип 30 fps через `zoompan` (Ken Burns). Покадровой генерации и image-to-video нет (TZ §1.4). Затем клипы сцен → xfade → аудио (озвучка + паузы) → музыка с ducking → ASS → логотип → MP4.
 5. **export.** MP4 + SRT, превью-кадр, запись стоимости и времени.
 
+**Реализация (этап 4):** `app/services/pipeline.py::run_pipeline()` выполняет шаги 1–5 последовательно, внутри шагов — параллельно. Он вызывает `on_progress(step, percent, message)` с долями scenes 0–10 %, images 10–50 %, tts 50–60 %, render 60–100 %. Результат пишется в `out_dir/`: `storyboard.json`, `images/`, `audio/` + `narration.json`, `work/`, `subtitles.srt/.ass`, `video.mp4` и `report.json` (время и ₽ по шагам). Если упала хоть одна сцена, рендер не запускается: `PipelineError` и `report.json` с ошибкой.
+
 Каждый шаг идемпотентен: если артефакт есть и hash входа совпадает, шаг пропускается. Это одновременно кэш и возможность продолжить с упавшего шага.
 
 Прогресс: каждая задача публикует в Redis-канал `progress:{project_id}` событие `{step, scene, percent, message}`, API отдаёт его клиенту через SSE.
@@ -92,7 +94,7 @@ RenderJob
 | `services/llm/pricing.py` | ✅ Цены моделей ProxyAPI (₽ за 1M токенов) для расчёта `cost_rub` |
 | `services/scenes.py` | ✅ `split_script()`: проверка ввода (≤ 5 000 символов, стиль, формат), автоопределение языка, целевое число сцен (≈ 6 с на сцену), Pydantic-схема `Storyboard`, проверка совпадения текста со сценарием (≥ 0,97), повторы с retry-промптом, кэш `storage/cache/llm/{sha256}.json` |
 | `services/styles.py` | ✅ Пресеты стилей из `prompts/style_presets.md` |
-| `app/cli.py` | ✅ `llm-models`, `smoke-llm`, `scenes` (этап 1), `images` (этап 2), `tts` (этап 3) |
+| `app/cli.py` | ✅ `llm-models`, `smoke-llm`, `scenes` (этап 1), `images` (этап 2), `tts` (этап 3), `compose` и `render` (этап 4) |
 | `services/images/base.py` | ✅ Интерфейс провайдера: `ImageRequest` (prompt, negative, размер, seed) → `ImageResult` (байты, ₽) |
 | `services/images/fal.py` | ✅ Fal.ai: `POST https://fal.run/<FAL_MODEL>`, `Authorization: Key …`, скачивание по URL. У FLUX schnell нет negative prompt |
 | `services/images/proxyapi.py` | ✅ ProxyAPI Images API (OpenAI SDK), ответ в `b64_json` или `url` |
@@ -101,37 +103,47 @@ RenderJob
 | `services/images/generator.py` | ✅ Параллельная генерация (`IMAGE_CONCURRENCY`), общий seed проекта, 2 попытки на кадр, ошибка одной сцены не роняет остальные, кэш `storage/cache/images/{sha256}.img` |
 | `services/tts.py` | ✅ Edge TTS (edge-tts 7, `boundary="WordBoundary"`): MP3 на сцену + тайминги слов, нормализация текста (финальная пунктуация для интонации), 3 попытки, кэш `storage/cache/tts/{sha256}.mp3/.json`, длительность через ffprobe (запасной вариант — расчёт по битрейту 48 кбит/с). Адаптировано из MoneyPrinterTurbo (MIT) |
 | `services/subtitles.py` | ✅ Пунктуация из исходного текста → фразы (лимит символов по формату, ≤ 3,5 с, разрыв на конце предложения и паузе > 0,6 с) → SRT и ASS. Режимы `phrase` и `karaoke` (`\kf`, подсветка текущего слова) |
-| `services/compositor.py` | Построение и запуск FFmpeg-команд |
+| `services/compositor.py` | ✅ Таймлайн, построители FFmpeg-команд (чистые функции, на них golden-тесты), `run_ffmpeg`, `render_video()` |
+| `services/pipeline.py` | ✅ `run_pipeline()`: сценарий → MP4, прогресс, `report.json` |
 | `services/music.py` | Каталог треков, подбор по `mood` |
 | `services/templates.py` | Загрузка JSON-шаблонов форматов |
 | `app/prompts/loader.py` | ✅ Чтение `backend/prompts/*.md` (YAML front matter + секции `## system`/`## user`), подстановка `{{var}}`, ошибка при отсутствии переменной |
 | `app/workers/celery_app.py` | ✅ Celery: маршрутизация `tasks.ai.*` → `ai`, `tasks.render.*` → `render`; `CELERY_EAGER=true` для тестов |
 
-## 6. Рецепты FFmpeg (черновик)
+## 6. Рецепты FFmpeg (реализовано в `services/compositor.py`)
 
-**Клип сцены с Ken Burns** (кадр предварительно масштабирован до 2× размера выхода, чтобы зум был плавным):
+**Таймлайн.** T — переход (`TRANSITION_SEC`, 0,4 с), P — пауза после сцены (`TTS_SCENE_PAUSE_SEC`, 0,4 с), dᵢ — длина озвучки:
+```
+clipᵢ = dᵢ + P + T        (у последней сцены без T)
+start₀ = 0;  startᵢ₊₁ = startᵢ + clipᵢ − T   ← offset для xfade и задержка озвучки i+1
+total  = start_last + clip_last
+```
+Переход приходится на паузу, голос не обрезается.
+
+**1. Клип сцены (Ken Burns)**, параллельно по `RENDER_CONCURRENCY`. Кадр сначала масштабируется в 2×, чтобы `zoompan` не дрожал из-за округления координат:
 ```bash
-ffmpeg -loop 1 -i scene.png -t {dur} -vf \
- "zoompan=z='min(zoom+0.0008,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps=30,format=yuv420p" \
- -c:v libx264 -preset veryfast -crf 20 clip_i.mp4
+ffmpeg -i scene_00.png -vf "scale=2160:3840,zoompan=z='1+0.15*on/N':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=N:s=1080x1920:fps=30,format=yuv420p" \
+  -frames:v N -c:v libx264 -preset veryfast -crf 20 work/clip_00.mp4
+```
+Камеры (поле `camera` из `scene_split`): `zoom_in`, `zoom_out` (z = 1.15 → 1), `pan_left` / `pan_right` (z = 1.12, x движется), `static` (z = 1.03).
+
+**2. Аудио:** озвучка на таймлайне, нормализация, музыка с ducking:
+```bash
+ffmpeg -i v0.mp3 -i v1.mp3 [-stream_loop -1 -i music.mp3] -filter_complex \
+ "[0:a]aresample=48000,aformat=channel_layouts=stereo,adelay=0:all=1[a0];[1:a]...adelay=2400:all=1[a1];
+  [a0][a1]amix=inputs=2:normalize=0:duration=longest,apad,atrim=0:TOTAL,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[voice];
+  [voice]asplit=2[vmix][vkey];[2:a]...volume=0.25,atrim=0:TOTAL[music];
+  [music][vkey]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400[ducked];
+  [vmix][ducked]amix=inputs=2:normalize=0:duration=first[mix]" -map "[mix]" -c:a aac -b:a 160k work/audio.m4a
 ```
 
-**Переходы** (смещение = сумма длительностей предыдущих клипов − n·T):
+**3. Финальная сборка за одно кодирование:** переходы, прожиг субтитров, mux. ffmpeg запускается с `cwd=out_dir`, поэтому путь к `.ass` относительный и не требует экранирования:
 ```bash
-ffmpeg -i c0.mp4 -i c1.mp4 -i c2.mp4 -filter_complex \
- "[0][1]xfade=transition=fade:duration=0.5:offset={o1}[v1];[v1][2]xfade=transition=slideleft:duration=0.5:offset={o2}[v]" \
- -map "[v]" video.mp4
+ffmpeg -i work/clip_00.mp4 -i work/clip_01.mp4 -i work/audio.m4a -filter_complex \
+ "[0:v][1:v]xfade=transition=slideleft:duration=0.4:offset=START1[x1];[x1]ass=subtitles.ass[v]" \
+ -map "[v]" -map 2:a -c:v libx264 -preset veryfast -crf 21 -pix_fmt yuv420p -c:a copy -t TOTAL -movflags +faststart video.mp4
 ```
-
-**Музыка с ducking, субтитры, логотип, финальное кодирование:**
-```bash
-ffmpeg -i video.mp4 -i voice.m4a -i music.mp3 -i logo.png -filter_complex \
- "[2:a]volume=0.25,aloop=-1:2e9[m];[m][1:a]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400[md];\
-  [1:a][md]amix=inputs=2:duration=first:normalize=0[a];\
-  [0:v]ass=subs.ass[vs];[3:v]scale=iw*0.12:-1,format=rgba,colorchannelmixer=aa=0.8[lg];\
-  [vs][lg]overlay=W-w-40:40[v]" \
- -map "[v]" -map "[a]" -c:v libx264 -preset veryfast -crf 21 -c:a aac -b:a 160k -movflags +faststart out.mp4
-```
+Переходы по умолчанию: 9:16 → `slideleft`, 16:9 и 1:1 → `fade` (на этапе 6 переедут в шаблоны). Логотип (`overlay`) — этап 6.
 
 ### Паузы и тайминг (этап 3)
 Edge TTS больше не принимает собственный SSML, поэтому тег `<break>` недоступен. Паузы внутри сцены дают знаки препинания. Паузу между сценами (`TTS_SCENE_PAUSE_SEC`, 0,4 с) compositor добавляет тишиной (`apad`). Длительность клипа сцены = длительность озвучки + пауза. Субтитры строятся по абсолютным таймингам: `place_on_timeline()` сдвигает слова каждой сцены на её старт в итоговом видео.

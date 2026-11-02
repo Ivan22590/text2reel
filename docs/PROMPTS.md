@@ -169,6 +169,7 @@ negative: text, letters, watermark, logo, signature, caption, blurry, low qualit
 | B9 | 2026-11-02 | Этап 1 | «Продолжать с этапом 1» | LLM-клиент ProxyAPI, сервис `scene_split` с валидацией, повторами и кэшем, CLI `llm-models`/`smoke-llm`/`scenes`, тесты с моком LLM |
 | B10 | 2026-11-02 | Этап 2 | «продолжай» | Адаптеры картинок Fal.ai и ProxyAPI, сборка промптов со style bible и общим seed, кадрирование cover/blur, параллельная генерация с кэшем, CLI `images`, тесты без платных вызовов |
 | B11 | 2026-11-02 | Этап 3 | «продолжай» | Озвучка Edge TTS с таймингами слов (адаптация из MoneyPrinterTurbo, MIT), субтитры SRT/ASS с karaoke-подсветкой, CLI `tts`, тесты |
+| B12 | 2026-11-02 | Этап 4 | «Продолжай» (план этапа 4 утверждён в plan mode) | Compositor на FFmpeg (Ken Burns, xfade, ASS, loudnorm, ducking), `run_pipeline` и CLI `render`/`compose`, e2e-тесты с ffmpeg в CI |
 
 ### Шаблоны промптов для следующих этапов
 Повторно используемые формулировки для работы с ассистентом:

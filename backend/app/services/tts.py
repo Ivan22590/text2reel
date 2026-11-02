@@ -221,3 +221,30 @@ def synthesize_scenes(
             for index, text in enumerate(texts)
         ]
         return [future.result() for future in futures]
+
+
+def write_manifest(narrations: list[Narration], path: Path) -> None:
+    """Saves narration paths, durations and word timings (`narration.json`)."""
+    data = [
+        {
+            "index": n.index,
+            "path": str(n.path),
+            "duration": n.duration,
+            "words": [asdict(w) for w in n.words or []],
+        }
+        for n in narrations
+    ]
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def read_manifest(path: Path) -> list[Narration]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return [
+        Narration(
+            index=item["index"],
+            path=Path(item["path"]),
+            duration=item["duration"],
+            words=[Word(**w) for w in item["words"]],
+        )
+        for item in data
+    ]

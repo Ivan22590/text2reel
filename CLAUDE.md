@@ -44,7 +44,9 @@ python -m app.cli smoke-llm | llm-models --filter haiku       # проверка
 python -m app.cli scenes script.txt --style anime --format 9:16 --out sb.json  # этап 1
 python -m app.cli images sb.json --style anime --format 9:16 --out-dir out/      # этап 2 (платно)
 python -m app.cli tts sb.json --voice ru-RU-DmitryNeural --format 9:16 --out-dir out/  # этап 3 (бесплатно)
-python -m app.cli render script.txt --style anime --format 9:16  # пайплайн целиком (этап 4, ещё нет)
+python -m app.cli compose --storyboard sb.json --images out/ --narration out/narration.json  # монтаж без API
+python -m app.cli render script.txt --style anime --format 9:16 --out-dir out/  # пайплайн целиком (этап 4)
+pytest -m ffmpeg   # e2e с настоящим ffmpeg (в CI ставится apt-ом)
 # без pip локально ruff можно скачать: gh release download -R astral-sh/ruff -p "ruff-x86_64-unknown-linux-gnu.tar.gz"
 ```
 

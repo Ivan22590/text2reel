@@ -5,25 +5,28 @@ python -m app.cli smoke-llm                      # one cheap request to primary 
 python -m app.cli scenes script.txt --style anime --format 9:16 --out storyboard.json
 python -m app.cli images storyboard.json --style anime --format 9:16 --out-dir out/
 python -m app.cli tts storyboard.json --voice ru-RU-SvetlanaNeural --format 9:16 --out-dir out/
+python -m app.cli compose --storyboard storyboard.json --images out/ --narration out/narration.json
+python -m app.cli render script.txt --style anime --format 9:16 --out-dir out/   # everything
 """
 
 import argparse
-import json
 import sys
 import time
 from pathlib import Path
 
 from app.config import get_settings
 from app.prompts.loader import load_prompt
+from app.services.compositor import RenderScene, render_video
 from app.services.images import get_provider
 from app.services.images.crop import OUTPUT_SIZES
 from app.services.images.generator import generate_images
 from app.services.images.prompting import build_prompts
 from app.services.llm.client import LLMClient, LLMError
+from app.services.pipeline import PipelineError, run_pipeline
 from app.services.scenes import FORMATS, Storyboard, split_script
 from app.services.styles import get_style, load_style_presets
 from app.services.subtitles import STYLE_DEFAULTS, build_cues, place_on_timeline, to_ass, to_srt
-from app.services.tts import VOICES, synthesize_scenes
+from app.services.tts import VOICES, read_manifest, synthesize_scenes, write_manifest
 
 
 def cmd_llm_models(args: argparse.Namespace) -> int:
@@ -142,19 +145,58 @@ def cmd_tts(args: argparse.Namespace) -> int:
     (out_dir / "subtitles.ass").write_text(
         to_ass(cues, *OUTPUT_SIZES[args.format], style), encoding="utf-8"
     )
-    manifest = [
-        {
-            "index": r.index,
-            "path": str(r.path),
-            "duration": r.duration,
-            "words": [w.__dict__ for w in r.words],
-        }
-        for r in results
-    ]
-    (out_dir / "narration.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    write_manifest(results, out_dir / "narration.json")
     print(
         f"narration: {offset:.1f}s total | cues: {len(cues)} | {time.monotonic() - started:.1f}s",
         file=sys.stderr,
+    )
+    return 0
+
+
+def cmd_compose(args: argparse.Namespace) -> int:
+    """Re-renders a video from existing images and narration (no paid calls)."""
+    settings = get_settings()
+    storyboard = Storyboard.model_validate_json(Path(args.storyboard).read_text(encoding="utf-8"))
+    narrations = read_manifest(Path(args.narration))
+    images = Path(args.images)
+    scenes = [
+        RenderScene(images / f"scene_{n.index:02d}.png", n.path, n.duration, n.words,
+                    sc.narration, sc.camera)
+        for n, sc in zip(narrations, storyboard.scenes, strict=True)
+    ]  # fmt: skip
+    result = render_video(
+        scenes, Path(args.out_dir), args.format,
+        music=Path(args.music) if args.music else None, music_volume=settings.music_volume,
+        transition_sec=settings.transition_sec, pause=settings.tts_scene_pause_sec,
+        fps=settings.render_fps, preset=settings.ffmpeg_preset,
+        concurrency=settings.render_concurrency,
+    )  # fmt: skip
+    steps = " | ".join(f"{name} {sec:.1f}s" for name, sec in result.timings.items())
+    print(f"{result.video} ({result.duration:.1f}s) | {steps}")
+    return 0
+
+
+def cmd_render(args: argparse.Namespace) -> int:
+    settings = get_settings()
+
+    def on_progress(step: str, percent: float, message: str) -> None:
+        print(f"[{percent:5.1f}%] {step}: {message}", file=sys.stderr)
+
+    try:
+        result = run_pipeline(
+            Path(args.script).read_text(encoding="utf-8"),
+            style=args.style, format=args.format, voice=args.voice, seed=args.seed,
+            out_dir=Path(args.out_dir), music=Path(args.music) if args.music else None,
+            use_cache=not args.no_cache, on_progress=on_progress, settings=settings,
+        )  # fmt: skip
+    except PipelineError as exc:
+        print(f"FAILED: {exc}", file=sys.stderr)
+        return 1
+    for step in result.steps:
+        print(f"{step.name:7s} {step.seconds:6.1f}s {step.cost_rub:7.2f} RUB")
+    print(
+        f"video: {result.video} ({result.duration:.1f}s) | total {result.seconds:.1f}s, "
+        f"{result.cost_rub:.2f} RUB | report: {result.report}"
     )
     return 0
 
@@ -198,6 +240,26 @@ def build_parser() -> argparse.ArgumentParser:
     tts.add_argument("--out-dir", default="out")
     tts.add_argument("--no-cache", action="store_true")
     tts.set_defaults(func=cmd_tts)
+
+    compose = sub.add_parser("compose", help="render video from existing images + narration")
+    compose.add_argument("--storyboard", required=True)
+    compose.add_argument("--images", required=True, help="dir with scene_XX.png")
+    compose.add_argument("--narration", required=True, help="narration.json from `tts`")
+    compose.add_argument("--format", default="9:16", choices=FORMATS)
+    compose.add_argument("--music", default=None, help="background music file")
+    compose.add_argument("--out-dir", default="out")
+    compose.set_defaults(func=cmd_compose)
+
+    render = sub.add_parser("render", help="full pipeline: script file -> MP4")
+    render.add_argument("script")
+    render.add_argument("--style", default="realism", choices=sorted(load_style_presets()))
+    render.add_argument("--format", default="9:16", choices=FORMATS)
+    render.add_argument("--voice", default=get_settings().tts_voice, choices=sorted(VOICES))
+    render.add_argument("--seed", type=int, default=42)
+    render.add_argument("--music", default=None, help="background music file")
+    render.add_argument("--out-dir", default="out")
+    render.add_argument("--no-cache", action="store_true")
+    render.set_defaults(func=cmd_render)
     return parser
 
 

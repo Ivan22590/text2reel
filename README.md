@@ -13,7 +13,7 @@
 | Этап 1: разбивка сценария на сцены (LLM через ProxyAPI) | 🔄 код и тесты готовы, ждёт прогона с ключом |
 | Этап 2: генерация картинок (Fal.ai / ProxyAPI) | 🔄 код и тесты готовы, ждёт прогона с ключом |
 | Этап 3: озвучка Edge TTS + субтитры SRT/ASS | 🔄 код и тесты готовы, ждёт прогона на VPS |
-| Этап 4: монтаж FFmpeg | ⏳ не начат |
+| Этап 4: монтаж FFmpeg, команда `render` (сценарий → MP4) | 🔄 e2e-тесты в CI зелёные, ждёт прогона с API |
 | Frontend | ⏳ не начат |
 | Музыка, шаблоны, брендинг | ⏳ не начат |
 | Деплой и демо | ⏳ не начат |
@@ -97,6 +97,10 @@ python -m app.cli smoke-llm                                   # проверит
 python -m app.cli scenes script.txt --style watercolor --format 9:16 --out sb.json   # разбить сценарий на сцены
 python -m app.cli images sb.json --style watercolor --format 9:16 --out-dir out/       # картинка на каждую сцену
 python -m app.cli tts sb.json --voice ru-RU-SvetlanaNeural --format 9:16 --out-dir out/  # озвучка + субтитры
+python -m app.cli compose --storyboard sb.json --images out/ --narration out/narration.json --format 9:16  # монтаж
+
+# всё сразу: сценарий → out/video.mp4 + subtitles.srt + report.json (время и ₽ по шагам)
+python -m app.cli render script.txt --style watercolor --format 9:16 --voice ru-RU-SvetlanaNeural [--music track.mp3]
 ```
 
 ### Переменные окружения
