@@ -89,6 +89,7 @@ Your answer was rejected: {{error}}. Return the corrected JSON only.
 - **Файл:** [`backend/prompts/scene_regenerate.md`](../backend/prompts/scene_regenerate.md)
 - **Этап:** 2 (FR-2.5)
 - **Модель:** Claude Haiku 5.5, `temperature=0.7`, JSON
+- **Где используется:** `POST /api/scenes/{id}/regenerate` с непустым `hint` → `app/services/scenes.py::regenerate_visual_prompt()`
 - **Переменные:** `style_bible_json`, `narration`, `previous_prompt`, `user_hint`
 
 ```
@@ -170,6 +171,7 @@ negative: text, letters, watermark, logo, signature, caption, blurry, low qualit
 | B10 | 2026-11-02 | Этап 2 | «продолжай» | Адаптеры картинок Fal.ai и ProxyAPI, сборка промптов со style bible и общим seed, кадрирование cover/blur, параллельная генерация с кэшем, CLI `images`, тесты без платных вызовов |
 | B11 | 2026-11-02 | Этап 3 | «продолжай» | Озвучка Edge TTS с таймингами слов (адаптация из MoneyPrinterTurbo, MIT), субтитры SRT/ASS с karaoke-подсветкой, CLI `tts`, тесты |
 | B12 | 2026-11-02 | Этап 4 | «Продолжай» (план этапа 4 утверждён в plan mode) | Compositor на FFmpeg (Ken Burns, xfade, ASS, loudnorm, ducking), `run_pipeline` и CLI `render`/`compose`, e2e-тесты с ffmpeg в CI |
+| B13 | 2026-11-02 | Этап 5a | «Продолжай» | API для веб-интерфейса, Celery-задачи, SSE-прогресс, демо-логин; промпт `scene_regenerate` подключён к перегенерации сцены |
 
 ### Шаблоны промптов для следующих этапов
 Повторно используемые формулировки для работы с ассистентом:

@@ -53,38 +53,47 @@ POST /projects/{id}/render       ──▶ [render] compose(format) ──▶ ex
 Project
   id, title, script, language, style, format, voice, music_track_id|null,
   branding_json, status (draft|analyzing|scenes_ready|generating|assets_ready|rendering|done|failed),
-  style_bible, seed, created_at, updated_at
+  style_bible, seed,
+  step, progress, message, error, cost_rub      ← состояние текущей задачи (читает SSE)
+  created_at, updated_at
 
 Scene
   id, project_id, index, narration, visual_prompt, mood, camera,
-  image_path, audio_path, duration_sec, words_json, status, error
+  image_path, audio_path, duration_sec, words_json, status (pending|ready|failed), error,
+  image_seed                                    ← +1 при перегенерации: seed кадра = project.seed + image_seed
 
 RenderJob
-  id, project_id, format, status, progress, step,
+  id, project_id, format, status (queued|running|done|failed), progress, step,
   output_path, srt_path, started_at, finished_at, error,
   tokens_in, tokens_out, images_count, cost_rub
 ```
 
-## 4. API (черновик)
+Файлы проекта: `storage/projects/{id}/images/scene_XX.png`, `audio/scene_XX.mp3`, `renders/{job_id}/video.mp4 + subtitles.srt/.ass`. Кэш: `storage/cache/{llm,images,tts}` (через `/api/files` не отдаётся).
+
+**Статусы и что их меняет.** `analyze`: draft → analyzing → scenes_ready (при ошибке снова draft + `error`). `generate`: → generating → assets_ready (если упала сцена — scenes_ready + `error`). `render`: → rendering → done (при ошибке assets_ready + `error`). Если изменить текст сцены, сбрасывается её озвучка; если изменить промпт, стиль или формат — картинка; если голос — озвучка всех сцен. После этого проект возвращается в scenes_ready. Пока проект в состоянии analyzing, generating или rendering, изменения отклоняются с кодом 409.
+
+## 4. API (реализовано в `app/api/`, все пути кроме `/health` и `/auth/*` требуют входа)
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/api/health` | ✅ Статус API, версия, выбранные модели |
-| POST | `/api/auth/login` | Демо-логин, выдаёт cookie-сессию |
-| GET | `/api/meta` | Стили, форматы, голоса, треки, шаблоны |
-| POST | `/api/projects` | Создать проект (текст или файл) |
-| GET | `/api/projects` | История проектов |
-| GET | `/api/projects/{id}` | Проект со сценами |
-| PATCH | `/api/projects/{id}` | Изменить стиль, формат, голос, музыку, брендинг |
-| POST | `/api/projects/{id}/analyze` | Разбить на сцены |
-| PATCH | `/api/scenes/{id}` | Изменить текст или промпт сцены |
-| POST | `/api/scenes/{id}/regenerate` | Перегенерировать картинку и/или озвучку сцены |
-| POST | `/api/projects/{id}/generate` | Сгенерировать картинки и озвучку для всех сцен |
-| GET | `/api/projects/{id}/timeline` | Данные для таймлайна (сцены, длительности, субтитры) |
-| POST | `/api/projects/{id}/render` | Запустить рендер (`{format, draft: bool}`) |
-| GET | `/api/projects/{id}/events` | SSE-поток прогресса |
-| GET | `/api/files/{path}` | Раздача файлов (картинки, аудио, MP4, SRT) |
-| POST | `/api/branding/logo` | Загрузка логотипа |
+| GET | `/api/health` | Статус API, версия, выбранные модели |
+| POST | `/api/auth/login` | Демо-логин (`DEMO_USER`/`DEMO_PASSWORD`), cookie `t2r_session` = `user:HMAC(SECRET_KEY)` |
+| POST / GET | `/api/auth/logout`, `/api/auth/me` | Выход, текущий пользователь |
+| GET | `/api/meta` | Стили, форматы, голоса, камеры, переходы по умолчанию |
+| POST | `/api/scripts/parse` | Текст из загруженного `.txt` (UTF-8/CP1251) или `.docx` (≤ 1 МБ) |
+| GET / POST | `/api/projects` | История; создать проект (лимит `DEMO_MAX_PROJECTS_PER_DAY` → 429) |
+| GET / PATCH / DELETE | `/api/projects/{id}` | Проект со сценами и рендерами; изменить параметры; удалить |
+| POST | `/api/projects/{id}/analyze` | Задача `ai.analyze`: разбить на сцены → 202 |
+| POST | `/api/projects/{id}/generate` | Задача `ai.generate`: картинки и озвучка недостающих сцен → 202 |
+| PATCH | `/api/scenes/{id}` | Изменить текст, визуальный промпт или камеру сцены |
+| POST | `/api/scenes/{id}/regenerate` | `{target: image|audio|all, hint}`: новый seed; если задан `hint`, сначала LLM пишет новый промпт (`scene_regenerate`) |
+| GET | `/api/projects/{id}/timeline` | Дорожки для превью: старты и длины клипов, озвучка, фразы субтитров |
+| POST | `/api/projects/{id}/render` | Задача `render.render` → `RenderJob` (409, если у сцен нет ассетов) |
+| GET | `/api/projects/{id}/events` | SSE: `{status, step, progress, message, error}` при каждом изменении; поток закрывается, когда задача завершена |
+| GET | `/api/files/{path}` | Картинки, аудио, MP4, SRT из `storage/` (Range-запросы для перемотки видео) |
+| POST | `/api/branding/logo` | Загрузка логотипа (этап 6) |
+
+**Прогресс без шины сообщений.** Задача пишет `step`, `progress` и `message` в строку Project. SSE-эндпоинт опрашивает её раз в 0,7 с и отправляет только изменения. Так проще, чем Redis pub/sub, и работает в eager-режиме тестов.
 
 ## 5. Сервисы backend
 
@@ -104,7 +113,11 @@ RenderJob
 | `services/tts.py` | ✅ Edge TTS (edge-tts 7, `boundary="WordBoundary"`): MP3 на сцену + тайминги слов, нормализация текста (финальная пунктуация для интонации), 3 попытки, кэш `storage/cache/tts/{sha256}.mp3/.json`, длительность через ffprobe (запасной вариант — расчёт по битрейту 48 кбит/с). Адаптировано из MoneyPrinterTurbo (MIT) |
 | `services/subtitles.py` | ✅ Пунктуация из исходного текста → фразы (лимит символов по формату, ≤ 3,5 с, разрыв на конце предложения и паузе > 0,6 с) → SRT и ASS. Режимы `phrase` и `karaoke` (`\kf`, подсветка текущего слова) |
 | `services/compositor.py` | ✅ Таймлайн, построители FFmpeg-команд (чистые функции, на них golden-тесты), `run_ffmpeg`, `render_video()` |
-| `services/pipeline.py` | ✅ `run_pipeline()`: сценарий → MP4, прогресс, `report.json` |
+| `services/pipeline.py` | ✅ `run_pipeline()`: сценарий → MP4, прогресс, `report.json` (для CLI) |
+| `services/project_jobs.py` | ✅ Те же шаги над БД для веб-интерфейса: `analyze_project`, `generate_assets` (только недостающее), `regenerate_scene`, `render_project`, `build_timeline` |
+| `services/providers.py` | ✅ Фабрики LLM / картинок / TTS для задач; в тестах подменяются через `overrides` |
+| `workers/tasks.py` | ✅ Celery-задачи `ai.analyze`, `ai.generate`, `ai.regenerate_scene`, `render.render` |
+| `api/auth.py`, `api/projects.py`, `api/schemas.py` | ✅ REST, SSE, раздача файлов |
 | `services/music.py` | Каталог треков, подбор по `mood` |
 | `services/templates.py` | Загрузка JSON-шаблонов форматов |
 | `app/prompts/loader.py` | ✅ Чтение `backend/prompts/*.md` (YAML front matter + секции `## system`/`## user`), подстановка `{{var}}`, ошибка при отсутствии переменной |
