@@ -118,10 +118,13 @@ class ProxyAPIImageProvider:
 
     def _image_bytes(self, item) -> bytes:
         if getattr(item, "b64_json", None):
-            try:
-                return base64.b64decode(item.b64_json)
+            try:  # validate=True: by default garbage characters are silently dropped
+                data = base64.b64decode(item.b64_json, validate=True)
             except ValueError as exc:
                 raise ImageError(f"ProxyAPI sent invalid base64: {exc}") from exc
+            if not data:
+                raise ImageError("ProxyAPI sent an empty image")
+            return data
         if getattr(item, "url", None):  # not in the docs, but some models answer with a link
             try:
                 download = httpx.get(item.url, timeout=self.settings.image_timeout_sec)
