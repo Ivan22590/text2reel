@@ -179,8 +179,8 @@ def test_proxyapi_provider_decodes_b64():
         ImageRequest("a fox", "text", 768, 1344, 3)
     )
     assert result.data.startswith(b"\x89PNG") and result.cost_rub == 1.2
-    # 768x1344 (9:16) is not a size OpenAI-style models know: the closest allowed one is asked
-    assert calls[0]["size"] == "1024x1536" and calls[0]["model"] == "flux-klein"
+    # the configured size closest to the wanted aspect ratio is asked
+    assert calls[0]["size"] == "768x1344" and calls[0]["model"] == "flux-klein"
 
 
 def test_provider_selection_errors():

@@ -1,4 +1,5 @@
 import base64
+import re
 from types import SimpleNamespace
 
 import httpx
@@ -7,6 +8,7 @@ import pytest
 
 from app.config import Settings
 from app.services.images import ImageError, ImageRequest, get_provider
+from app.services.images.pricing import PRICES_RUB_PER_1M, prices_for
 from app.services.images.proxyapi import ProxyAPIImageProvider, closest_size, parse_sizes
 from tests.test_images import png_bytes
 
@@ -47,7 +49,7 @@ def make(*answers, **settings) -> tuple[ProxyAPIImageProvider, FakeImages]:
 def test_defaults_work_out_of_the_box():
     settings = Settings(proxyapi_key="k")
     assert settings.image_provider == "proxyapi"
-    assert get_provider(settings).model == "openai/gpt-image-1-mini"
+    assert get_provider(settings).model == "black-forest-labs/flux-3-image-klein"
 
 
 def test_sizes_are_parsed_and_the_closest_aspect_wins():
@@ -56,6 +58,10 @@ def test_sizes_are_parsed_and_the_closest_aspect_wins():
     assert closest_size(1344, 768, sizes) == (1536, 1024)  # 16:9 -> 3:2
     assert closest_size(1024, 1024, sizes) == (1024, 1024)
     assert closest_size(900, 900, [(512, 512), (1024, 1024)]) == (1024, 1024)  # tie: the larger
+    default = parse_sizes(Settings().proxyapi_image_sizes)
+    assert [closest_size(*wh, default) for wh in ((768, 1344), (1344, 768), (1024, 1024))] == [
+        (768, 1344), (1344, 768), (1024, 1024),
+    ]  # fmt: skip
     for bad in ("", "1024", "axb", "0x512", "1024x1024x3"):
         with pytest.raises(ImageError, match="PROXYAPI_IMAGE_SIZES"):
             parse_sizes(bad)
@@ -66,13 +72,18 @@ def test_request_uses_documented_parameters_only():
     provider.generate(REQUEST)
     assert fake.calls == [
         {
-            "model": "openai/gpt-image-1-mini",
+            "model": "black-forest-labs/flux-3-image-klein",
             "prompt": "a red fox",
             "n": 1,
-            "size": "1024x1536",
-            "quality": "low",
+            "size": "768x1344",
         }
-    ]  # fmt: skip  (no seed, no negative prompt: undocumented, a 400 is likely)
+    ]  # no seed, negative prompt or quality: undocumented, a 400 is likely for FLUX
+
+
+def test_quality_is_sent_when_configured():
+    provider, fake = make(proxyapi_image_quality="low", proxyapi_image_model="openai/gpt-image-2")
+    provider.generate(REQUEST)
+    assert fake.calls[0]["quality"] == "low"
 
 
 def test_optional_parameters():
@@ -95,30 +106,63 @@ def test_returns_image_and_cost_from_token_usage():
     result = provider.generate(REQUEST)
     assert result.data.startswith(b"\x89PNG")
     assert result.cost_rub == pytest.approx(0.5)  # (100*1000 + 200*2000) / 1e6
-    assert result.info == {"tokens_in": 100, "tokens_out": 200, "size": "1024x1536"}
+    assert result.info == {"tokens_in": 100, "tokens_out": 200, "size": "768x1344"}
+
+
+def test_price_comes_from_the_catalog_table_for_known_models():
+    usage = SimpleNamespace(input_tokens=1000, output_tokens=1000)
+    provider, _ = make(ok(usage))  # default model: FLUX 3 Image Klein, 263.16 / 263.16 RUB per 1M
+    assert provider.generate(REQUEST).cost_rub == pytest.approx(0.52632)
+    assert prices_for("black-forest-labs/flux-3-image-klein") == (263.16, 263.16)
+    assert prices_for("openai/gpt-image-2") == (1520.0, 9100.0)
+    assert prices_for("nobody/unknown-model") == (0.0, 0.0)
+    assert prices_for("openai/gpt-image-2", 1.0, 2.0) == (1.0, 2.0)  # settings win
+
+
+def test_price_table_matches_the_catalog_naming():
+    assert len(PRICES_RUB_PER_1M) >= 40
+    for model, (price_in, price_out) in PRICES_RUB_PER_1M.items():
+        assert re.fullmatch(r"[a-z0-9-]+/[a-z0-9.-]+", model), model  # vendor/name
+        assert price_in > 0 and price_out > 0, model
+    assert Settings().proxyapi_image_model in PRICES_RUB_PER_1M
 
 
 def test_cost_falls_back_to_the_flat_price_then_to_zero():
     flat, _ = make(proxyapi_image_cost_rub=1.2)
     assert flat.generate(REQUEST).cost_rub == 1.2
-    # tokens are reported but no price list is configured: the flat price still applies
+    # tokens are reported but the model has no price (not in the table): the flat price applies
     priced_by_flat, _ = make(
-        ok(SimpleNamespace(input_tokens=5, output_tokens=5)), proxyapi_image_cost_rub=0.8
-    )
+        ok(SimpleNamespace(input_tokens=5, output_tokens=5)),
+        proxyapi_image_model="nobody/unknown-model", proxyapi_image_cost_rub=0.8,
+    )  # fmt: skip
     assert priced_by_flat.generate(REQUEST).cost_rub == 0.8
     unknown, _ = make()
     assert unknown.generate(REQUEST).cost_rub == 0.0
 
 
-def test_refused_size_falls_back_to_1024_and_is_remembered():
-    provider, fake = make(bad_request("Invalid value for size: 1024x1536"), ok(), ok())
+def test_refused_size_moves_to_the_next_closest_and_is_remembered():
+    provider, fake = make(bad_request("Invalid value for size: 768x1344"), ok(), ok())
     provider.generate(REQUEST)
     provider.generate(REQUEST)
-    assert [c["size"] for c in fake.calls] == ["1024x1536", "1024x1024", "1024x1024"]
+    # 768x1344 refused -> 1024x1536 is the next closest to 9:16; image 2 goes straight to it
+    assert [c["size"] for c in fake.calls] == ["768x1344", "1024x1536", "1024x1536"]
+
+
+def test_when_every_size_is_refused_no_size_is_sent():
+    provider, fake = make(
+        bad_request("unsupported resolution"), bad_request("unsupported resolution"), ok(),
+        proxyapi_image_sizes="512x512",
+    )  # fmt: skip
+    result = provider.generate(REQUEST)
+    # 512x512 refused, then the documented 1024x1024, then no `size` at all (model default)
+    assert [c.get("size") for c in fake.calls] == ["512x512", "1024x1024", None]
+    assert result.info["size"] == "model default"
 
 
 def test_model_without_quality_gets_none():
-    provider, fake = make(bad_request("Unknown parameter: 'quality'"), ok(), ok())
+    provider, fake = make(
+        bad_request("Unknown parameter: 'quality'"), ok(), ok(), proxyapi_image_quality="low"
+    )
     provider.generate(REQUEST)
     provider.generate(REQUEST)
     assert ["quality" in c for c in fake.calls] == [True, False, False]

@@ -53,7 +53,7 @@ React (Vite + Ant Design) ──REST/SSE──▶ FastAPI ──▶ Redis ──
 |---|---|
 | Backend | Python 3.12, FastAPI, SQLAlchemy, Pydantic, Celery, Redis |
 | Видео и аудио | FFmpeg 6+, Pillow, edge-tts |
-| AI | LLM через [ProxyAPI](https://proxyapi.ru) (Claude Haiku 5.5, запасная DeepSeek V4.1 Flash), изображения через ProxyAPI (по умолчанию `openai/gpt-image-1-mini`; запасной вариант Fal.ai FLUX schnell) |
+| AI | LLM через [ProxyAPI](https://proxyapi.ru) (Claude Haiku 5.5, запасная DeepSeek V4.1 Flash), изображения через ProxyAPI (по умолчанию `black-forest-labs/flux-3-image-klein`; запасной вариант Fal.ai FLUX schnell) |
 | Frontend | React 18, TypeScript, Vite, Ant Design |
 | Инфраструктура | Docker Compose, Caddy (HTTPS), GitHub Actions |
 

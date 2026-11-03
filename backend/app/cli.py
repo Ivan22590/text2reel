@@ -33,6 +33,7 @@ from app.services.compositor import RenderScene, encode_options, render_video
 from app.services.images import ImageError, ImageRequest, get_provider
 from app.services.images.crop import DRAFT_SIZES, GENERATION_SIZES, OUTPUT_SIZES
 from app.services.images.generator import generate_images
+from app.services.images.pricing import PRICES_RUB_PER_1M as IMAGE_PRICES
 from app.services.images.prompting import build_prompts
 from app.services.llm.client import LLMClient, LLMError
 from app.services.music import is_valid_choice, load_catalog, resolve_music
@@ -100,24 +101,21 @@ def cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
-IMAGE_MODEL_HINTS = (
-    "image",
-    "flux",
-    "seedream",
-    "qwen",
-    "banana",
-    "dall",
-    "imagen",
-    "recraft",
-    "sd",
-)
+IMAGE_MODEL_HINTS = ("image", "flux", "seedream", "qwen-image", "banana", "recraft", "krea")
 
 
 def cmd_image_models(_: argparse.Namespace) -> int:
-    """Ids from ProxyAPI's /v1/models that look like image generators (prices: ProxyAPI catalog)."""
-    for model_id in sorted(m.id for m in LLMClient().client.models.list()):
-        if any(hint in model_id.lower() for hint in IMAGE_MODEL_HINTS):
-            print(model_id)
+    """Image models of your ProxyAPI account, cheapest first, with prices from the catalog table."""
+    ids = sorted(m.id for m in LLMClient().client.models.list())
+    found = [i for i in ids if i in IMAGE_PRICES or any(h in i.lower() for h in IMAGE_MODEL_HINTS)]
+    found.sort(key=lambda i: (i not in IMAGE_PRICES, IMAGE_PRICES.get(i, (0, 0))[1], i))
+    for model_id in found:
+        price = IMAGE_PRICES.get(model_id)
+        shown = f"{price[0]:>9,.2f} / {price[1]:>9,.2f}" if price else "     not in the price table"
+        print(f"{model_id:44} {shown}")
+    print(
+        "RUB per 1M tokens (input / output); set PROXYAPI_IMAGE_MODEL, see docs/MODELS_AND_COSTS.md"
+    )
     return 0
 
 

@@ -52,4 +52,4 @@ def test_missing_key_is_reported():
 
 def test_cost_for_known_model():
     # Claude Haiku 5.5: 30 / 150 RUB per 1M tokens
-    assert cost_rub("claude-haiku-5-5", 2000, 3000) == pytest.approx(0.51)
+    assert cost_rub("anthropic/claude-haiku-5-5", 2000, 3000) == pytest.approx(0.51)

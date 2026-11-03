@@ -5,10 +5,12 @@ What the ProxyAPI docs (proxyapi.ru/docs/image-generation) say, and what the ada
   base64 in `data[0].b64_json`, there is no URL.
 - Not every model accepts every parameter and an unsupported one is a 400. `seed` and a
   negative prompt are not documented, so they are off by default (settings).
-- Sizes differ per model: the documented one is 1024x1024, OpenAI-style models also take
-  1024x1536 and 1536x1024. The adapter asks for the allowed size closest to the wanted aspect
-  ratio (the generator crops the rest) and falls back to 1024x1024 if the API refuses the size.
-- Prices are per million tokens, so the cost comes from the token usage in the response.
+- The catalog and the model pages do not say which sizes a model accepts (the page of FLUX 3
+  Image Klein shows `model` and `prompt` only). The adapter tries the configured sizes, closest
+  aspect ratio first (the generator crops the rest); a size the API refuses is dropped, then
+  1024x1024 (the only size in the docs), and finally no `size` at all (the model's default).
+- Prices are per million tokens (app/services/images/pricing.py, from the catalog), so the cost
+  comes from the token usage in the response.
 """
 
 import base64
@@ -20,10 +22,12 @@ import openai
 
 from app.config import Settings
 from app.services.images.base import ImageError, ImageRequest, ImageResult
+from app.services.images.pricing import prices_for
 
 log = logging.getLogger(__name__)
 
 SAFE_SIZE = "1024x1024"  # the only size shown in the ProxyAPI docs
+SIZE_WORDS = ("size", "dimension", "resolution", "aspect")  # what a size complaint talks about
 
 
 def parse_sizes(text: str) -> list[tuple[int, int]]:
@@ -64,7 +68,7 @@ class ProxyAPIImageProvider:
             max_retries=2,  # connection errors, 408/409/429 and 5xx, with backoff
         )
         # Learned from 400 answers, so the next images do not repeat the failed attempt.
-        self._force_safe_size = False
+        self._refused_sizes: set[str] = set()
         self._drop_quality = False
 
     def _prompt(self, request: ImageRequest) -> str:
@@ -72,14 +76,18 @@ class ProxyAPIImageProvider:
             return f"{request.prompt}\nAvoid: {request.negative_prompt}"
         return request.prompt
 
+    def _size(self, request: ImageRequest) -> str | None:
+        """Best remaining size; None = send no `size` and let the model use its default."""
+        allowed = [s for s in self.sizes if f"{s[0]}x{s[1]}" not in self._refused_sizes]
+        if allowed:
+            width, height = closest_size(request.width, request.height, allowed)
+            return f"{width}x{height}"
+        return SAFE_SIZE if SAFE_SIZE not in self._refused_sizes else None
+
     def _params(self, request: ImageRequest) -> dict:
-        width, height = (1024, 1024) if self._force_safe_size else closest_size(
-            request.width, request.height, self.sizes
-        )  # fmt: skip
-        params: dict = {
-            "model": self.model, "prompt": self._prompt(request), "n": 1,
-            "size": f"{width}x{height}",
-        }  # fmt: skip
+        params: dict = {"model": self.model, "prompt": self._prompt(request), "n": 1}
+        if size := self._size(request):
+            params["size"] = size
         if self.settings.proxyapi_image_quality and not self._drop_quality:
             params["quality"] = self.settings.proxyapi_image_quality
         if self.settings.proxyapi_image_send_seed:
@@ -87,16 +95,16 @@ class ProxyAPIImageProvider:
         return params
 
     def generate(self, request: ImageRequest) -> ImageResult:
-        for _ in range(3):  # the original request plus at most two adjustments
+        for _ in range(len(self.sizes) + 3):  # every refusal removes one option
             params = self._params(request)
             try:
                 resp = self.client.images.generate(**params)
                 break
             except openai.BadRequestError as exc:
                 message = str(exc).lower()
-                if "size" in message and params["size"] != SAFE_SIZE:
-                    log.warning("ProxyAPI refused size %s, using %s", params["size"], SAFE_SIZE)
-                    self._force_safe_size = True
+                if "size" in params and any(word in message for word in SIZE_WORDS):
+                    log.warning("ProxyAPI refused size %s, trying another", params["size"])
+                    self._refused_sizes.add(params["size"])
                 elif "quality" in message and "quality" in params:
                     log.warning("ProxyAPI model has no `quality`, not sending it")
                     self._drop_quality = True
@@ -113,7 +121,7 @@ class ProxyAPIImageProvider:
             raise ImageError("ProxyAPI returned no images")
         data = self._image_bytes(resp.data[0])
         cost, info = self._cost(resp)
-        info["size"] = params["size"]
+        info["size"] = params.get("size", "model default")
         return ImageResult(data, self.name, self.model, cost, info)
 
     def _image_bytes(self, item) -> bytes:
@@ -135,26 +143,22 @@ class ProxyAPIImageProvider:
         raise ImageError("ProxyAPI image has neither b64_json nor url")
 
     def _cost(self, resp) -> tuple[float, dict]:
-        """Rubles for one image: token usage x the price list, else the flat per-image price."""
+        """Rubles for one image: token usage x the model's price, else the flat per-image price."""
         s = self.settings
         usage = getattr(resp, "usage", None)
-        tokens_in = (
-            getattr(usage, "input_tokens", None) or getattr(usage, "prompt_tokens", None) or 0
+        tokens_in = getattr(usage, "input_tokens", None) or getattr(usage, "prompt_tokens", None)
+        tokens_out = getattr(usage, "output_tokens", None) or getattr(
+            usage, "completion_tokens", None
         )
-        tokens_out = (
-            getattr(usage, "output_tokens", None) or getattr(usage, "completion_tokens", None) or 0
-        )
+        tokens_in, tokens_out = tokens_in or 0, tokens_out or 0
         info = {"tokens_in": tokens_in, "tokens_out": tokens_out}
-        if (tokens_in or tokens_out) and (
-            s.proxyapi_image_price_in_rub or s.proxyapi_image_price_out_rub
-        ):
-            cost = (
-                tokens_in * s.proxyapi_image_price_in_rub
-                + tokens_out * s.proxyapi_image_price_out_rub
-            ) / 1e6
-            return cost, info
+        price_in, price_out = prices_for(
+            self.model, s.proxyapi_image_price_in_rub, s.proxyapi_image_price_out_rub
+        )
+        if (tokens_in or tokens_out) and (price_in or price_out):
+            return (tokens_in * price_in + tokens_out * price_out) / 1e6, info
         if s.proxyapi_image_cost_rub == 0:
             log.warning(
-                "image cost is unknown: set PROXYAPI_IMAGE_PRICE_* or PROXYAPI_IMAGE_COST_RUB"
+                "image cost is unknown: no usage in the answer or no price for %s", self.model
             )
         return s.proxyapi_image_cost_rub, info

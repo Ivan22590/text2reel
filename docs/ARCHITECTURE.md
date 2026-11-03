@@ -112,7 +112,8 @@ RenderJob
 | `app/cli.py` | ✅ `llm-models`, `smoke-llm`, `image-models`, `smoke-image`, `scenes` (этап 1), `images` (этап 2), `tts` (этап 3), `compose` и `render` (этап 4) |
 | `services/images/base.py` | ✅ Интерфейс провайдера: `ImageRequest` (prompt, negative, размер, seed) → `ImageResult` (байты, ₽) |
 | `services/images/fal.py` | ✅ Fal.ai: `POST https://fal.run/<FAL_MODEL>`, `Authorization: Key …`, скачивание по URL. У FLUX schnell нет negative prompt |
-| `services/images/proxyapi.py` | ✅ ProxyAPI Images API (`/v1/images/generations`, OpenAI SDK, ответ `b64_json`): размер из `PROXYAPI_IMAGE_SIZES` по ближайшим пропорциям с откатом на 1024×1024, `quality`, необязательный seed через `extra_body`, стоимость по токенам из `usage`, понятные ошибки модерации и параметров |
+| `services/images/proxyapi.py` | ✅ ProxyAPI Images API (`/v1/images/generations`, OpenAI SDK, ответ `b64_json`): размеры из `PROXYAPI_IMAGE_SIZES` пробуются по очереди (ближайший по пропорциям, отвергнутый отбрасывается, затем 1024×1024, затем без `size`), `quality` только если задан, seed по флагу через `extra_body`, стоимость по токенам из `usage` и таблице цен, понятные ошибки модерации и параметров |
+| `services/images/pricing.py`, `services/llm/pricing.py` | ✅ Идентификаторы с префиксами и цены ProxyAPI (₽ за 1 млн токенов) из каталога https://proxyapi.ru/models/browse на 2026-11-03 |
 | `services/images/prompting.py` | ✅ Сборка промпта по шаблону `image_prompt`: префикс и суффикс стиля + style bible + визуал сцены |
 | `services/images/crop.py` | ✅ Размеры генерации (~1 МП) и выхода (1080p), кадрирование `cover` / `blur` (размытый фон) |
 | `services/images/generator.py` | ✅ Параллельная генерация (`IMAGE_CONCURRENCY`), общий seed проекта, 2 попытки на кадр, ошибка одной сцены не роняет остальные, кэш `storage/cache/images/{sha256}.img` |

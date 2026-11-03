@@ -90,3 +90,24 @@ def test_smoke_image_failure_is_reported(monkeypatch, capsys):
     monkeypatch.setattr(cli, "get_provider", broken)
     assert cli.main(["smoke-image"]) == 1
     assert "FAIL: PROXYAPI_KEY is not set" in capsys.readouterr().out
+
+
+def test_image_models_lists_cheapest_first_with_prices(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    ids = [
+        "openai/gpt-image-2", "anthropic/claude-haiku-5-5", "black-forest-labs/flux-3-image-klein",
+        "newvendor/brand-new-image", "qwen/qwen-image-2.1-turbo",
+    ]  # fmt: skip
+    listing = SimpleNamespace(list=lambda: [SimpleNamespace(id=i) for i in ids])
+    client = SimpleNamespace(client=SimpleNamespace(models=listing))
+    monkeypatch.setattr(cli, "LLMClient", lambda: client)
+    assert cli.main(["image-models"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    shown = [line.split()[0] for line in lines[:-1]]
+    # text models are not listed; image models absent from the table come last
+    assert shown == [
+        "black-forest-labs/flux-3-image-klein", "qwen/qwen-image-2.1-turbo",
+        "openai/gpt-image-2", "newvendor/brand-new-image",
+    ]  # fmt: skip
+    assert "263.16" in lines[0] and "not in the price table" in lines[3]

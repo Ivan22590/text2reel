@@ -31,3 +31,18 @@ def test_example_loads_into_settings(monkeypatch):
     settings = Settings(_env_file=None)
     assert settings.proxyapi_key == "" and settings.storage_ttl_days == 7
     assert settings.ffmpeg_upscale == 2.0 and settings.auto_migrate is True
+
+
+def test_example_models_are_the_defaults_and_are_priced():
+    """Model ids must carry the vendor prefix (ProxyAPI catalog) and have a price."""
+    from app.services.images.pricing import PRICES_RUB_PER_1M as IMAGE_PRICES
+    from app.services.llm.pricing import PRICES_RUB_PER_1M as LLM_PRICES
+
+    values, defaults = dotenv_values(ENV_EXAMPLE), Settings()
+    assert values["LLM_MODEL"] == defaults.llm_model in LLM_PRICES
+    assert values["LLM_FALLBACK_MODEL"] == defaults.llm_fallback_model in LLM_PRICES
+    assert values["PROXYAPI_IMAGE_MODEL"] == defaults.proxyapi_image_model in IMAGE_PRICES
+    assert values["PROXYAPI_IMAGE_SIZES"] == defaults.proxyapi_image_sizes
+    assert values["IMAGE_PROVIDER"] == defaults.image_provider == "proxyapi"
+    for model in (defaults.llm_model, defaults.llm_fallback_model, defaults.proxyapi_image_model):
+        assert "/" in model, f"{model}: ProxyAPI ids have a vendor prefix"

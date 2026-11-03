@@ -8,8 +8,8 @@ Text2Reel — учебный проект Zerocoder: платформа «тек
 - Свой код: FastAPI + Celery/Redis + React/TS + FFmpeg.
 - Модули TTS и субтитров можно адаптировать из MoneyPrinterTurbo (MIT): в заголовке файла указать источник, обновить `NOTICE`.
 - Код story-flicks НЕ копировать: у него нет лицензии.
-- LLM только через ProxyAPI (`services/llm/client.py`, OpenAI-совместимый SDK, `PROXYAPI_BASE_URL`, `PROXYAPI_KEY`). Основная модель Claude Haiku 5.5, запасная DeepSeek V4.1 Flash. Preview-модели не использовать.
-- Картинки: адаптер с `IMAGE_PROVIDER`: по умолчанию `proxyapi` (тот же ключ, оплата в рублях), `fal` запасной (про его доступность из РФ подтверждений нет). Seed и негативный промпт у ProxyAPI не описаны, по умолчанию не отправляем. TTS: Edge TTS.
+- LLM только через ProxyAPI (`services/llm/client.py`, OpenAI-совместимый SDK, `PROXYAPI_BASE_URL`, `PROXYAPI_KEY`). Основная модель Claude Haiku 5.5, запасная DeepSeek V4.1 Flash. Preview-модели не использовать. **Идентификаторы моделей ProxyAPI всегда с префиксом производителя** (`anthropic/claude-haiku-5-5`, `deepseek/deepseek-v4.1-flash`); идентификаторы и цены берём из каталога https://proxyapi.ru/models/browse, а не из примеров в документации (пример `openai/gpt-image-1-mini` в каталоге отсутствует). Таблицы цен: `services/llm/pricing.py`, `services/images/pricing.py`.
+- Картинки: адаптер с `IMAGE_PROVIDER`: по умолчанию `proxyapi` (модель `black-forest-labs/flux-3-image-klein`, тот же ключ, оплата в рублях), `fal` запасной (про его доступность из РФ подтверждений нет). Seed и негативный промпт у ProxyAPI не описаны, по умолчанию не отправляем. TTS: Edge TTS.
 - Музыка и шрифты лежат в `backend/assets`, шаблоны форматов в `backend/templates` (чтобы попадать в Docker-образ). Новый трек добавлять только после проверки лицензии (CC0 с подтверждением на источнике), с записью в `catalog.json` и `LICENSES.md`. Треки Komiku не используем: на Commons у них не подтверждена лицензия.
 - Бюджет API ≈ $5–20. Не делать лишних платных вызовов в тестах (мокать клиентов).
 

@@ -19,24 +19,28 @@ class Settings(BaseSettings):
 
     proxyapi_key: str = ""
     proxyapi_base_url: str = "https://api.proxyapi.ru/v1"
-    llm_model: str = "claude-haiku-5-5"
-    llm_fallback_model: str = "deepseek-v4.1-flash"
+    # ProxyAPI ids carry the vendor prefix (https://proxyapi.ru/models/browse).
+    llm_model: str = "anthropic/claude-haiku-5-5"
+    llm_fallback_model: str = "deepseek/deepseek-v4.1-flash"
     llm_timeout_sec: int = 60
 
     image_provider: str = "proxyapi"  # proxyapi | fal
     fal_key: str = ""
     fal_model: str = "fal-ai/flux/schnell"
     fal_cost_usd_per_mp: float = 0.003
-    # ProxyAPI Images API (docs/MODELS_AND_COSTS.md §3). The model id is the example from the
-    # ProxyAPI docs; find cheaper ones with `python -m app.cli image-models`.
-    proxyapi_image_model: str = "openai/gpt-image-1-mini"
-    # Sizes the model accepts; the one closest to the wanted aspect ratio is requested.
-    proxyapi_image_sizes: str = "1024x1024,1024x1536,1536x1024"
-    proxyapi_image_quality: str = "low"  # empty = not sent (not every model has it)
+    # ProxyAPI Images API (docs/MODELS_AND_COSTS.md §3). FLUX 3 Image Klein is the cheapest
+    # non-preview model of the catalog; `python -m app.cli image-models` lists the others.
+    proxyapi_image_model: str = "black-forest-labs/flux-3-image-klein"
+    # Sizes to try, best aspect-ratio match first; a size the model refuses is dropped. The
+    # catalog does not say which sizes a model accepts. OpenAI-style models take the last three.
+    proxyapi_image_sizes: str = "768x1344,1344x768,1024x1024,1024x1536,1536x1024"
+    proxyapi_image_quality: str = (
+        ""  # low | medium | high for OpenAI-style models; empty = not sent
+    )
     proxyapi_image_negative: str = "ignore"  # ignore | append ("Avoid: ..." added to the prompt)
     proxyapi_image_send_seed: bool = False  # `seed` is undocumented: off, a 400 is likely
-    # Price list of the chosen model (rubles per 1M tokens, from the ProxyAPI catalog). With the
-    # token usage returned in the response they give the cost of an image.
+    # Rubles per 1M tokens. 0 = take the model's price from the table in
+    # app/services/images/pricing.py; set both only for a model that is not in the table.
     proxyapi_image_price_in_rub: float = 0.0
     proxyapi_image_price_out_rub: float = 0.0
     proxyapi_image_cost_rub: float = 0.0  # flat per image, used when the response has no usage
