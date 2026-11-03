@@ -11,7 +11,7 @@
 | Документация (ТЗ, архитектура, промпты, roadmap) | ✅ готово (черновик v0.1) |
 | Каркас (FastAPI, модели, Celery, React, Docker Compose, CI) | 🔄 CI зелёный, ждёт проверки на VPS |
 | Этап 1: разбивка сценария на сцены (LLM через ProxyAPI) | 🔄 код и тесты готовы, ждёт прогона с ключом |
-| Этап 2: генерация картинок (Fal.ai / ProxyAPI) | 🔄 код и тесты готовы, ждёт прогона с ключом |
+| Этап 2: генерация картинок (ProxyAPI, запасной Fal.ai) | 🔄 код и тесты готовы, ждёт прогона с ключом |
 | Этап 3: озвучка Edge TTS + субтитры SRT/ASS | 🔄 код и тесты готовы, ждёт прогона на VPS |
 | Этап 4: монтаж FFmpeg, команда `render` (сценарий → MP4) | 🔄 e2e-тесты в CI зелёные, ждёт прогона с API |
 | Этап 5a: API для UI (проекты, сцены, SSE-прогресс, демо-логин) | ✅ CI зелёный |
@@ -53,7 +53,7 @@ React (Vite + Ant Design) ──REST/SSE──▶ FastAPI ──▶ Redis ──
 |---|---|
 | Backend | Python 3.12, FastAPI, SQLAlchemy, Pydantic, Celery, Redis |
 | Видео и аудио | FFmpeg 6+, Pillow, edge-tts |
-| AI | LLM через [ProxyAPI](https://proxyapi.ru) (Claude Haiku 5.5, запасная DeepSeek V4.1 Flash), изображения через Fal.ai FLUX schnell или ProxyAPI |
+| AI | LLM через [ProxyAPI](https://proxyapi.ru) (Claude Haiku 5.5, запасная DeepSeek V4.1 Flash), изображения через ProxyAPI (по умолчанию `openai/gpt-image-1-mini`; запасной вариант Fal.ai FLUX schnell) |
 | Frontend | React 18, TypeScript, Vite, Ant Design |
 | Инфраструктура | Docker Compose, Caddy (HTTPS), GitHub Actions |
 
@@ -65,13 +65,13 @@ React (Vite + Ant Design) ──REST/SSE──▶ FastAPI ──▶ Redis ──
 
 ### Требования
 - Docker 24+ и Docker Compose v2
-- Ключ [ProxyAPI](https://proxyapi.ru) (LLM) и ключ [Fal.ai](https://fal.ai) (изображения), если не используем картинки через ProxyAPI
+- Ключ [ProxyAPI](https://proxyapi.ru): нужен и для LLM, и для картинок. Ключ Fal.ai не нужен (он только для запасного провайдера и требует зарубежной оплаты)
 
 ### Запуск
 ```bash
 git clone https://github.com/Ivan22590/text2reel.git
 cd text2reel
-cp .env.example .env        # впишите PROXYAPI_KEY и FAL_KEY
+cp .env.example .env        # впишите PROXYAPI_KEY
 docker compose up --build
 ```
 - Интерфейс: http://localhost:5173
@@ -118,7 +118,7 @@ python -m app.cli stats     # время, стоимость и доля усп�
 | `PROXYAPI_KEY` | Ключ ProxyAPI для LLM |
 | `PROXYAPI_BASE_URL` | Base URL ProxyAPI (OpenAI-совместимый) |
 | `LLM_MODEL`, `LLM_FALLBACK_MODEL` | Основная и запасная модели |
-| `IMAGE_PROVIDER`, `FAL_KEY` | Провайдер картинок (`fal` или `proxyapi`) и его ключ |
+| `IMAGE_PROVIDER`, `PROXYAPI_IMAGE_MODEL` | Провайдер картинок (`proxyapi` по умолчанию или `fal`) и модель; настройки размеров, качества и цен: `PROXYAPI_IMAGE_*` |
 | `TTS_VOICE` | Голос Edge TTS по умолчанию |
 | `REDIS_URL`, `DATABASE_URL`, `STORAGE_DIR` | Инфраструктура |
 | `DEMO_USER`, `DEMO_PASSWORD` | Демо-доступ |

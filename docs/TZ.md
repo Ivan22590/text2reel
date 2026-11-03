@@ -139,7 +139,7 @@ Text2Reel — веб-платформа, которая превращает т�
 ### Этап 2. Генерация изображений
 | ID | Требование | Приоритет |
 |---|---|---|
-| FR-2.1 | Генерация изображения на каждую сцену через провайдера картинок (Fal.ai FLUX или ProxyAPI) | M |
+| FR-2.1 | Генерация изображения на каждую сцену через провайдера картинок (ProxyAPI по умолчанию, Fal.ai FLUX запасной) | M |
 | FR-2.2 | Консистентность: префикс стиля + `style_bible` + общий seed + negative prompt | M |
 | FR-2.3 | Кадрирование и масштабирование под выбранный формат (cover или blur-fill) | M |
 | FR-2.4 | Параллельная генерация (до 4 одновременно) и кэш по hash(промпт, стиль, seed, размер) | S |
@@ -214,7 +214,7 @@ Frontend (React) → REST/SSE → Backend (FastAPI) → Redis → Celery workers
 
 Внешние сервисы:
 - LLM: ProxyAPI, основная Claude Haiku 5.5, запасная DeepSeek V4.1 Flash
-- Изображения: Fal.ai FLUX schnell или генерация изображений ProxyAPI
+- Изображения: ProxyAPI (по умолчанию), запасной вариант Fal.ai FLUX schnell
 - TTS: Edge TTS
 
 Обоснование выбора в [MODELS_AND_COSTS.md](MODELS_AND_COSTS.md).

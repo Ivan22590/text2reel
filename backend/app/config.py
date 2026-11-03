@@ -23,14 +23,25 @@ class Settings(BaseSettings):
     llm_fallback_model: str = "deepseek-v4.1-flash"
     llm_timeout_sec: int = 60
 
-    image_provider: str = "fal"
+    image_provider: str = "proxyapi"  # proxyapi | fal
     fal_key: str = ""
     fal_model: str = "fal-ai/flux/schnell"
     fal_cost_usd_per_mp: float = 0.003
-    proxyapi_image_model: str = ""
-    proxyapi_image_cost_rub: float = 0.0  # per image, fill in after the stage 2 comparison
+    # ProxyAPI Images API (docs/MODELS_AND_COSTS.md §3). The model id is the example from the
+    # ProxyAPI docs; find cheaper ones with `python -m app.cli image-models`.
+    proxyapi_image_model: str = "openai/gpt-image-1-mini"
+    # Sizes the model accepts; the one closest to the wanted aspect ratio is requested.
+    proxyapi_image_sizes: str = "1024x1024,1024x1536,1536x1024"
+    proxyapi_image_quality: str = "low"  # empty = not sent (not every model has it)
+    proxyapi_image_negative: str = "ignore"  # ignore | append ("Avoid: ..." added to the prompt)
+    proxyapi_image_send_seed: bool = False  # `seed` is undocumented: off, a 400 is likely
+    # Price list of the chosen model (rubles per 1M tokens, from the ProxyAPI catalog). With the
+    # token usage returned in the response they give the cost of an image.
+    proxyapi_image_price_in_rub: float = 0.0
+    proxyapi_image_price_out_rub: float = 0.0
+    proxyapi_image_cost_rub: float = 0.0  # flat per image, used when the response has no usage
     image_concurrency: int = 4
-    image_timeout_sec: int = 90
+    image_timeout_sec: int = 120
     image_fit: str = "cover"  # cover | blur
     usd_rub: float = 100.0  # for cost reporting of USD-priced providers
 

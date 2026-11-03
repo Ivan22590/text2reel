@@ -9,7 +9,7 @@ Text2Reel — учебный проект Zerocoder: платформа «тек
 - Модули TTS и субтитров можно адаптировать из MoneyPrinterTurbo (MIT): в заголовке файла указать источник, обновить `NOTICE`.
 - Код story-flicks НЕ копировать: у него нет лицензии.
 - LLM только через ProxyAPI (`services/llm/client.py`, OpenAI-совместимый SDK, `PROXYAPI_BASE_URL`, `PROXYAPI_KEY`). Основная модель Claude Haiku 5.5, запасная DeepSeek V4.1 Flash. Preview-модели не использовать.
-- Картинки: адаптер с `IMAGE_PROVIDER` (`fal` | `proxyapi`). TTS: Edge TTS.
+- Картинки: адаптер с `IMAGE_PROVIDER`: по умолчанию `proxyapi` (тот же ключ, оплата в рублях), `fal` запасной (про его доступность из РФ подтверждений нет). Seed и негативный промпт у ProxyAPI не описаны, по умолчанию не отправляем. TTS: Edge TTS.
 - Музыка и шрифты лежат в `backend/assets`, шаблоны форматов в `backend/templates` (чтобы попадать в Docker-образ). Новый трек добавлять только после проверки лицензии (CC0 с подтверждением на источнике), с записью в `catalog.json` и `LICENSES.md`. Треки Komiku не используем: на Commons у них не подтверждена лицензия.
 - Бюджет API ≈ $5–20. Не делать лишних платных вызовов в тестах (мокать клиентов).
 
@@ -42,6 +42,7 @@ cd backend && source .venv/bin/activate && pytest   # тесты backend (в .ve
 cd backend && ruff check . && ruff format .   # линт
 cd frontend && npm run dev | npm run lint
 python -m app.cli smoke-llm | llm-models --filter haiku       # проверка ProxyAPI (платно, копейки)
+python -m app.cli image-models | smoke-image [--model ID]     # модели картинок и один тестовый кадр: размер, токены, цена (~1 ₽)
 python -m app.cli scenes script.txt --style anime --format 9:16 --out sb.json  # этап 1
 python -m app.cli images sb.json --style anime --format 9:16 --out-dir out/      # этап 2 (платно)
 python -m app.cli tts sb.json --voice ru-RU-DmitryNeural --format 9:16 --out-dir out/  # этап 3 (бесплатно)

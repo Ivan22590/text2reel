@@ -22,7 +22,7 @@ curl -fsSL https://get.docker.com | sh && usermod -aG docker dev
 **Проект и инструменты (под пользователем `dev`):**
 ```bash
 git clone https://github.com/Ivan22590/text2reel.git ~/text2reel && cd ~/text2reel
-cp .env.example .env && nano .env                 # PROXYAPI_KEY, FAL_KEY
+cp .env.example .env && nano .env                 # PROXYAPI_KEY
 python3 -m venv backend/.venv && backend/.venv/bin/pip install -e "backend[dev]"   # тесты и линтер
 docker compose up --build                          # весь стек
 npm install -g @anthropic-ai/claude-code           # Claude Code на сервере (нужен Node 18+)
@@ -47,7 +47,7 @@ git clone https://github.com/Ivan22590/text2reel.git /opt/text2reel
 cd /opt/text2reel
 cp .env.example .env && nano .env
 ```
-В `.env` для prod задать: `APP_ENV=prod`, `DOMAIN` (A-запись домена должна смотреть на сервер), `SECRET_KEY` (длинная случайная строка), `POSTGRES_PASSWORD`, `DEMO_USER` и `DEMO_PASSWORD`, `PROXYAPI_KEY`, `FAL_KEY`. **Комментарии в `.env` только на отдельных строках**: `KEY=значение # комментарий` docker compose и Python читают по-разному (пустой ключ превращался в непустой).
+В `.env` для prod задать: `APP_ENV=prod`, `DOMAIN` (A-запись домена должна смотреть на сервер), `SECRET_KEY` (длинная случайная строка), `POSTGRES_PASSWORD`, `DEMO_USER` и `DEMO_PASSWORD`, `PROXYAPI_KEY` (он же для картинок; ключ Fal нужен только при `IMAGE_PROVIDER=fal`). **Комментарии в `.env` только на отдельных строках**: `KEY=значение # комментарий` docker compose и Python читают по-разному (пустой ключ превращался в непустой).
 
 ```bash
 export COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
@@ -85,6 +85,14 @@ $COMPOSE up -d --build          # новая версия миграций пр�
 - **Перед сдачей поставить `STORAGE_TTL_DAYS=0`** (очистка отключена, зависшие задачи всё равно восстанавливаются), иначе примеры проектов для проверяющих исчезнут через неделю.
 - Логи: `$COMPOSE logs -f --tail=200 worker-render`.
 - Статистика и KPI из БД: `$COMPOSE exec api python -m app.cli stats`.
+
+## 5a. Первая проверка внешних API (около 5 ₽, один раз)
+```bash
+$COMPOSE exec api python -m app.cli smoke-llm          # ключ ProxyAPI и модели LLM
+$COMPOSE exec api python -m app.cli image-models       # какие модели картинок есть у вас
+$COMPOSE exec api python -m app.cli smoke-image        # один кадр: запрошенный и полученный размер, токены, цена
+```
+По результатам `smoke-image` внести в `.env` цены модели из каталога ProxyAPI (`PROXYAPI_IMAGE_PRICE_IN_RUB`, `..._OUT_RUB`) и допустимые размеры (`PROXYAPI_IMAGE_SIZES`); подробности и что именно известно из документации: [MODELS_AND_COSTS.md §3](MODELS_AND_COSTS.md).
 
 ## 6. Демо-доступ
 - Логин и пароль из `DEMO_USER` / `DEMO_PASSWORD`, указываются в README и в сдаче.

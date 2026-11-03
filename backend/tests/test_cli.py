@@ -51,3 +51,42 @@ def test_cleanup_and_stats_commands(capsys):
     stats = json.loads(capsys.readouterr().out)
     assert {"projects", "render_final", "pipeline_seconds", "cost_rub"} <= set(stats)
     assert cli.main(["stats"]) == 0 and "K1 pipeline seconds" in capsys.readouterr().out
+
+
+def test_smoke_image_reports_size_time_and_cost(tmp_path, monkeypatch, capsys):
+    import io
+
+    from PIL import Image
+
+    from app.services.images import ImageResult
+
+    buf = io.BytesIO()
+    Image.new("RGB", (1024, 1536), (10, 20, 30)).save(buf, "PNG")
+
+    class FakeProvider:
+        name, model = "proxyapi", "some-model"
+
+        def generate(self, request):
+            assert (request.width, request.height) == (768, 1344)
+            info = {"size": "1024x1536", "tokens_in": 12, "tokens_out": 345}
+            return ImageResult(buf.getvalue(), self.name, self.model, 0.42, info)
+
+    monkeypatch.setattr(cli, "get_provider", lambda settings: FakeProvider())
+    out = tmp_path / "fox.png"
+    assert cli.main(["smoke-image", "--out", str(out)]) == 0
+    line = capsys.readouterr().out
+    assert "proxyapi/some-model" in line and "asked 1024x1536, got 1024x1536" in line
+    assert (
+        "tokens 12/345" in line and "0.42 RUB" in line and out.read_bytes().startswith(b"\x89PNG")
+    )
+
+
+def test_smoke_image_failure_is_reported(monkeypatch, capsys):
+    from app.services.images import ImageError
+
+    def broken(settings):
+        raise ImageError("PROXYAPI_KEY is not set")
+
+    monkeypatch.setattr(cli, "get_provider", broken)
+    assert cli.main(["smoke-image"]) == 1
+    assert "FAIL: PROXYAPI_KEY is not set" in capsys.readouterr().out

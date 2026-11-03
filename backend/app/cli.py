@@ -2,6 +2,8 @@
 
 python -m app.cli llm-models [--filter haiku]    # list model ids available in ProxyAPI
 python -m app.cli smoke-llm                      # one cheap request to primary + fallback
+python -m app.cli image-models                   # image model ids available in ProxyAPI
+python -m app.cli smoke-image [--model ID]       # one image: size, time, tokens, cost (~1 RUB)
 python -m app.cli scenes script.txt --style anime --format 9:16 --out storyboard.json
 python -m app.cli images storyboard.json --style anime --format 9:16 --out-dir out/
 python -m app.cli tts storyboard.json --voice ru-RU-SvetlanaNeural --format 9:16 --out-dir out/
@@ -13,10 +15,13 @@ python -m app.cli stats [--json]                 # KPI report from the database
 """
 
 import argparse
+import io
 import json
 import sys
 import time
 from pathlib import Path
+
+from PIL import Image
 
 from app.config import get_settings
 from app.db import SessionLocal
@@ -25,8 +30,8 @@ from app.services.branding import FONTS, Branding
 from app.services.cards import build_card_scenes
 from app.services.cleanup import cleanup_expired
 from app.services.compositor import RenderScene, encode_options, render_video
-from app.services.images import get_provider
-from app.services.images.crop import DRAFT_SIZES, OUTPUT_SIZES
+from app.services.images import ImageError, ImageRequest, get_provider
+from app.services.images.crop import DRAFT_SIZES, GENERATION_SIZES, OUTPUT_SIZES
 from app.services.images.generator import generate_images
 from app.services.images.prompting import build_prompts
 from app.services.llm.client import LLMClient, LLMError
@@ -92,6 +97,57 @@ def cmd_stats(args: argparse.Namespace) -> int:
     print(f"  render seconds: {final['seconds']}")
     print(f"K1 pipeline seconds (scenes+images+render): {spread}")
     print(f"K2 cost, RUB: {stats['cost_rub']}")
+    return 0
+
+
+IMAGE_MODEL_HINTS = (
+    "image",
+    "flux",
+    "seedream",
+    "qwen",
+    "banana",
+    "dall",
+    "imagen",
+    "recraft",
+    "sd",
+)
+
+
+def cmd_image_models(_: argparse.Namespace) -> int:
+    """Ids from ProxyAPI's /v1/models that look like image generators (prices: ProxyAPI catalog)."""
+    for model_id in sorted(m.id for m in LLMClient().client.models.list()):
+        if any(hint in model_id.lower() for hint in IMAGE_MODEL_HINTS):
+            print(model_id)
+    return 0
+
+
+def cmd_smoke_image(args: argparse.Namespace) -> int:
+    """Generates one image with the configured provider and reports what it really costs."""
+    updates = {}
+    if args.provider:
+        updates["image_provider"] = args.provider
+    if args.model:
+        updates["fal_model" if (args.provider or get_settings().image_provider) == "fal"
+                else "proxyapi_image_model"] = args.model  # fmt: skip
+    settings = get_settings().model_copy(update=updates)
+    try:
+        provider = get_provider(settings)
+        width, height = GENERATION_SIZES[args.format]
+        started = time.monotonic()
+        result = provider.generate(ImageRequest(args.prompt, "", width, height, seed=42))
+    except ImageError as exc:
+        print(f"FAIL: {exc}")
+        return 1
+    Path(args.out).write_bytes(result.data)
+    with Image.open(io.BytesIO(result.data)) as image:
+        got = image.size
+    print(
+        f"OK {provider.name}/{provider.model} | wanted {width}x{height}, asked "
+        f"{result.info.get('size', '?')}, got {got[0]}x{got[1]} | "
+        f"{time.monotonic() - started:.1f}s | "
+        f"tokens {result.info.get('tokens_in', '?')}/{result.info.get('tokens_out', '?')} | "
+        f"{result.cost_rub:.2f} RUB | saved {args.out}"
+    )
     return 0
 
 
@@ -334,6 +390,21 @@ def build_parser() -> argparse.ArgumentParser:
     stats = sub.add_parser("stats", help="KPI report (time, cost, success rate) from the database")
     stats.add_argument("--json", action="store_true")
     stats.set_defaults(func=cmd_stats)
+
+    image_models = sub.add_parser("image-models", help="image model ids in ProxyAPI")
+    image_models.set_defaults(func=cmd_image_models)
+
+    smoke_image = sub.add_parser("smoke-image", help="one test image: size, time, tokens, cost")
+    smoke_image.add_argument("--provider", choices=("proxyapi", "fal"), default=None)
+    smoke_image.add_argument("--model", default=None, help="override the configured model id")
+    smoke_image.add_argument("--format", default="9:16", choices=FORMATS)
+    smoke_image.add_argument("--out", default="smoke-image.png")
+    smoke_image.add_argument(
+        "--prompt",
+        default="a small red fox sitting on a hill at sunrise, watercolor painting, "
+        "vertical composition, no text",
+    )
+    smoke_image.set_defaults(func=cmd_smoke_image)
 
     music = sub.add_parser("music", help="list the background music library")
     music.set_defaults(func=cmd_music)

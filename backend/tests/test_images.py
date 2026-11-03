@@ -174,12 +174,13 @@ def test_proxyapi_provider_decodes_b64():
     client = SimpleNamespace(images=SimpleNamespace(generate=generate))
     settings = Settings(
         proxyapi_key="k", proxyapi_image_model="flux-klein", proxyapi_image_cost_rub=1.2
-    )
+    )  # sizes and quality are the defaults
     result = ProxyAPIImageProvider(settings, client=client).generate(
         ImageRequest("a fox", "text", 768, 1344, 3)
     )
     assert result.data.startswith(b"\x89PNG") and result.cost_rub == 1.2
-    assert calls[0]["size"] == "768x1344" and calls[0]["model"] == "flux-klein"
+    # 768x1344 (9:16) is not a size OpenAI-style models know: the closest allowed one is asked
+    assert calls[0]["size"] == "1024x1536" and calls[0]["model"] == "flux-klein"
 
 
 def test_provider_selection_errors():
@@ -188,4 +189,4 @@ def test_provider_selection_errors():
     with pytest.raises(ImageError, match="FAL_KEY"):
         get_provider(Settings(image_provider="fal", fal_key=""))
     with pytest.raises(ImageError, match="PROXYAPI_IMAGE_MODEL"):
-        get_provider(Settings(image_provider="proxyapi", proxyapi_key="k"))
+        get_provider(Settings(image_provider="proxyapi", proxyapi_key="k", proxyapi_image_model=""))

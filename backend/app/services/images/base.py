@@ -1,6 +1,6 @@
 """Image provider interface (FR-2.1). Providers: `fal` (Fal.ai FLUX) and `proxyapi`."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 
@@ -23,6 +23,7 @@ class ImageResult:
     provider: str
     model: str
     cost_rub: float = 0.0
+    info: dict = field(default_factory=dict)  # what the provider reports: size, tokens, ...
 
 
 class ImageProvider(Protocol):
